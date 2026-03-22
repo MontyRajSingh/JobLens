@@ -1,0 +1,35 @@
+# Data files (too large for git)
+data/
+data/*.csv
+venv/
+
+# Scraped output
+output/
+
+# Docker
+.docker/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+frontend/.env.production
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+
+# OS
+.DS_Store
+.wdm/
+
+# Env files (never commit credentials)
+.env
+.env.*
+!.env.example
+
+# NOTE: we DO commit pipeline/models/ so Railway has the trained model at deploy time.
+# Do NOT add pipeline/models/ here.
