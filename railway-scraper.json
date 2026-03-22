@@ -1,0 +1,10 @@
+{
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "Dockerfile.scraper"
+  },
+  "deploy": {
+    "cronSchedule": "0 9 * * *",
+    "startCommand": "python run_scraper.py"
+  }
+}

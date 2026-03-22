@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: joblens-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    region: oregon
+    plan: free
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: MODEL_DIR
+        value: /app/pipeline/models
+      - key: DATA_DIR
+        value: /app/output
+      - key: ALLOWED_ORIGINS
+        value: "*"
+    healthCheckPath: /health
