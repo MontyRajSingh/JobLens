@@ -353,11 +353,11 @@ class FeatureEngineer:
         bf["is_hybrid"] = remote_col.str.lower().str.contains("hybrid").astype(int)
 
         # FAANG
-        bf["is_faang"] = df["is_faang"].fillna(0).astype(int) if "is_faang" in df.columns else 0
+        bf["is_faang"] = df["is_faang"].replace({"False": 0, "True": 1, False: 0, True: 1}).fillna(0).astype(int) if "is_faang" in df.columns else 0
 
         # Equity / Bonus
-        bf["has_equity"] = df["has_equity"].fillna(0).astype(int) if "has_equity" in df.columns else 0
-        bf["has_bonus"] = df["has_bonus"].fillna(0).astype(int) if "has_bonus" in df.columns else 0
+        bf["has_equity"] = df["has_equity"].replace({"False": 0, "True": 1, False: 0, True: 1}).fillna(0).astype(int) if "has_equity" in df.columns else 0
+        bf["has_bonus"] = df["has_bonus"].replace({"False": 0, "True": 1, False: 0, True: 1}).fillna(0).astype(int) if "has_bonus" in df.columns else 0
 
         # Employment type flags
         emp_col = df["employment_type"].fillna("").str.lower() if "employment_type" in df.columns else pd.Series("", index=df.index)

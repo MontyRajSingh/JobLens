@@ -142,7 +142,7 @@ class SalaryPredictor:
 
             results[name] = {"rmse": rmse, "mae": mae, "r2": r2}
             self.all_models[name] = model
-            logger.info("%s — RMSE: $%,.0f | MAE: $%,.0f | R²: %.3f", name, rmse, mae, r2)
+            logger.info("%s — RMSE: $%s | MAE: $%s | R²: %.3f", name, f"{rmse:,.0f}", f"{mae:,.0f}", r2)
 
         # Step 5: Select best
         self.best_model_name = min(results, key=lambda k: results[k]["rmse"])
