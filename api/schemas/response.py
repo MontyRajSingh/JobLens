@@ -26,9 +26,9 @@ class JobRecord(BaseModel):
     """Single job record for API responses."""
 
     id: Optional[int] = Field(default=None, description="Database row ID")
-    job_title: str
+    job_title: Optional[str] = None
     company_name: Optional[str] = None
-    city: str
+    city: Optional[str] = None
     salary: Optional[str] = None
     salary_usd_numeric: Optional[float] = None
     seniority_level: Optional[str] = None
@@ -36,8 +36,8 @@ class JobRecord(BaseModel):
     remote_type: Optional[str] = None
     employment_type: Optional[str] = None
     skills_required: Optional[str] = None
-    source_website: str
-    job_link: str
+    source_website: Optional[str] = None
+    job_link: Optional[str] = None
     has_equity: Optional[bool] = None
     has_bonus: Optional[bool] = None
     is_faang: Optional[int] = None
