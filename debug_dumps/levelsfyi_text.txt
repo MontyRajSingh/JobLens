@@ -1,0 +1,154 @@
+Browse Jobs | Levels.fyi
+For Employers
+Download App
+₹
+INR
+/ yr
+Change
+Login
+Sign Up
+All Data
+By Location
+By Company
+By Title
+Salary Calculator
+Chart Visualizations
+Verified Salaries
+Internships
+H-1B Salaries
+Negotiation Support
+Compare Benefits
+Who's Hiring
+2025 Pay Report
+Top Paying Companies
+Integrate
+Blog
+Press
+Jobs
+Levels FYI Logo
+Salaries
+📂
+All Data
+🌎
+By Location
+🏢
+By Company
+🖋
+By Title
+🏭️
+By Industry
+📍
+Salary Heatmap
+📈
+Chart Visualizations
+🔥
+Real-time Percentiles
+🎓
+Internships
+🛂
+H-1B Salaries
+❣️
+Compare Benefits
+🎬
+2025 Pay Report
+🏆
+Top Paying Companies
+💸
+Calculate Meeting Cost
+#️⃣
+Salary Calculator
+Contribute
+Add Salary
+Add Company Benefits
+Add Level Mapping
+Jobs
+🔍
+Search Jobs
+📥
+Inbox
+Services
+Candidate Services
+💵
+Negotiation Coaching
+📄
+Resume Review
+🎁
+Gift a Resume Review
+For Employers
+Data Explorer
+Talent Pool
+Interactive Offer Letters
+Real-time Percentiles
+🔥
+Compensation Benchmarking
+Levels.fyi API
+For Academic Research
+Compensation Dataset
+Community
+Download App
+Drop your resume here
+Hiring?
+Senior talent, actively looking — salary expectations included
+Active talent, salary included
+Explore Talent
+Get Hired
+Interviews on your calendar. You set the bar.
+Interviews on your terms
+Upload Resume
+Resume
+Negotiate
+$10K+ guaranteed or money back
+Free Consult
+Search
+Hiring?
+Post or Promote
+a job
+Post or Promote a Job
+Saved
+Location
+Title
+Level
+Total Comp
+Remote
+Date Posted
+All Filters
+Clear Filters
+Something went wrong.
+Try
+refreshing
+your browser or viewing other jobs.
+Still having issues?
+Let us know
+so we can address this right now!
+Have an offer?
+© 2017-
+2026
+Levels Fyi Inc.
+Software Engineer, Control Plane
+Apply Now
+Hightouch · 3 months ago · San Francisco Bay Area, California, United States · Fully Remote
+₹16,387,831 - ₹23,671,311
+(base salary from job description)
+Levels.fyi's Total Compensation estimates  for Software Engineers at Hightouch. The median for this role is highlighted below.
+Median
+₹25.49M
+Apply Now
+Benefits
+Culture
+About Hightouch
+Hightouch is the modern AI platform for marketing and growth teams. Our AI agents reimagine marketing workflows, allowing marketers to create content, plan campaigns, and execute strategies with transformational velocity and performance.
+Hightouch is a rare company built on the intersection of two fundamental technological shifts: advances in LLMs and agentic AI, and the creation and rapid adoption of cloud data warehouses like Snowflake and Databricks. Building on these tailwinds, we've become a leader in AI marketing and partner with industry leaders like Domino's, Chime, Spotify, Ramp, Whoop, Grammarly, and over 1000 others.
+Our team focuses on making a meaningful impact for our customers. We approach challenges with first-principles thinking, move quickly and efficiently, and treat each other with compassion and kindness. We look for team members who are strong communicators, have a growth mindset, and are motivated and persistent in achieving our goals.
+About the Role
+In the last 12-18 months, Hightouch has been adopted by larger and larger customers and enterprises. These enterprises have both high data scale as well as complex organizations with many individuals and teams using Hightouch on a daily basis. The Control Plane team focuses on building user-friendly but powerful tools and products for enterprises to efficiently onboard onto Hightouch and manage and scale their Hightouch deployments.
+We're looking to add a
+product-minded backend engineer
+to the team. The ideal candidate will be comfortable diving deep into backend, distributed systems, and asynchronous workflows and think holistically about architecture, scalability, maintainability, and reliability. We are also looking for someone with strong customer and product thinking and who feels comfortable writing and engaging with product specs.
+Some of the problems we'll be working on include:
+Roles, Permissions, and Access Control
+: We have a flexible and powerful access control framework that allows enterprise admins to configure the right level of permissions for different groups of users and teams within their company. As Hightouch expands our product lines, the Control Plane team will also adapt and extend our access control capabilities to support that growth.
+Change Management:
+When a customer's underlying data model or data warehouse changes, this can have downstream impact on their Customer Studio schema, audiences, and other syncs and data pipelines. What tools can we build for admins to better manage these types of changes at scale?
+Data Warehouse Performance and Costs:
+As customers continue to adopt Hightouch within their organizations and their usage of Hightouch grows, they'll drive more warehouse activity and compute from Hightouch. How can we help admins better understand and optimize warehouse performance and costs as a result of Hightouch activity?
+We are looking for talented, intellectually curious, and motivated individuals who are interested in tackling the problems above. T

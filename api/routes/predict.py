@@ -6,8 +6,12 @@ POST /api/v1/predict
   Calls predict_salary() from pipeline/predict.py.
 """
 
+import json
 import logging
-from fastapi import APIRouter, HTTPException
+import requests
+from io import BytesIO
+import PyPDF2
+from fastapi import APIRouter, HTTPException, UploadFile, File
 
 from api.schemas.request import PredictRequest
 from api.schemas.response import PredictResponse
@@ -74,3 +78,80 @@ async def predict_salary_endpoint(request: PredictRequest):
     except Exception as e:
         logger.exception("Prediction error")
         raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
+
+@router.post(
+    "/resume",
+    summary="Predict salary from Resume",
+    description="Upload a resume PDF to extract fields via OpenRouter (Nemotron) and run prediction.",
+)
+async def predict_from_resume(file: UploadFile = File(...)):
+    if not file.filename.endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported")
+    
+    # Extract text from PDF
+    try:
+        content = await file.read()
+        pdf_reader = PyPDF2.PdfReader(BytesIO(content))
+        text = ""
+        for page in pdf_reader.pages:
+            text += page.extract_text() + "\n"
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to read PDF: {str(e)}")
+
+    # Call OpenRouter API
+    api_key = "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"
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    
+    prompt = f"""
+    You are an AI resume parser. Extract the following details from the resume text provided below.
+    Return ONLY a valid JSON object (no markdown formatting, no commentary) with the following schema:
+    {{
+        "job_title": "Current or target job title (string)",
+        "experience_years": "Total years of experience (number)",
+        "skills": ["List of top technical skills", ...],
+        "education_required": "Highest education degree (e.g. Bachelor's, Master's, PhD, or empty string)",
+        "company_name": "Current or most recent company name (string)"
+    }}
+    
+    Resume Text:
+    {text}
+    """
+    
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": "nvidia/nemotron-3-super-120b-a12b:free",
+        "messages": [{"role": "user", "content": prompt}],
+    }
+    
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
+        response.raise_for_status()
+        result_text = response.json()["choices"][0]["message"]["content"].strip()
+        
+        # Clean up markdown code blocks if any
+        if result_text.startswith("```json"):
+            result_text = result_text[7:-3].strip()
+        elif result_text.startswith("```"):
+            result_text = result_text[3:-3].strip()
+            
+        extracted_data = json.loads(result_text)
+    except Exception as e:
+        logger.exception("Failed to parse resume with OpenRouter")
+        raise HTTPException(status_code=500, detail=f"Failed to process resume: {str(e)}")
+        
+    # Set default fields for prediction
+    extracted_data["city"] = "New York, NY, USA"
+    extracted_data["seniority_level"] = "Mid-Level (2-5 years)" 
+    if extracted_data.get("experience_years", 0) > 5:
+        extracted_data["seniority_level"] = "Senior (5+ years)"
+    extracted_data["employment_type"] = "Full-time"
+    extracted_data["remote_type"] = "On-site"
+    extracted_data["has_equity"] = False
+    extracted_data["has_bonus"] = False
+
+    # Return extracted data so frontend can populate form and then trigger prediction
+    return {"extracted_data": extracted_data}
+

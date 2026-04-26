@@ -162,9 +162,6 @@ class FeatureEngineer:
         self.feature_columns = list(features.columns)
         self._fitted = True
 
-        # Print summary
-        self._print_summary(df, features)
-
         logger.info("FeatureEngineer: %d feature columns created", len(self.feature_columns))
         return features
 
@@ -435,52 +432,6 @@ class FeatureEngineer:
         ef["source_indeed"] = source_col.str.contains("indeed").astype(int)
         ef["source_glassdoor"] = source_col.str.contains("glassdoor").astype(int)
         return ef
-
-    # ──────────────────────────────────────────────
-    # Summary printing
-    # ──────────────────────────────────────────────
-
-    def _print_summary(self, df: pd.DataFrame, features: pd.DataFrame) -> None:
-        """Print feature engineering summary after fit_transform."""
-        print(f"\n{'='*70}")
-        print(f" 🔧 FEATURE ENGINEERING SUMMARY")
-        print(f"{'='*70}")
-        print(f" Total feature columns: {len(features.columns)}")
-
-        salary_count = df["salary_usd_numeric"].notna().sum() if "salary_usd_numeric" in df.columns else 0
-        print(f" Training rows with salary: {salary_count}/{len(df)}")
-
-        # Salary percentiles
-        if self.salary_percentiles:
-            print(f"\n 💰 Salary percentiles (training):")
-            for k, v in self.salary_percentiles.items():
-                print(f"    {k}: ${v:,.0f}")
-
-        # Top 10 skills by frequency
-        if "skills_required" in df.columns:
-            all_skills = df["skills_required"].dropna().str.split(", ").explode()
-            top_skills = all_skills.value_counts().head(10)
-            print(f"\n 🛠  Top 10 skills:")
-            for skill, count in top_skills.items():
-                print(f"    {skill}: {count}")
-
-        # Correlation with salary (Group A numeric features only)
-        if "salary_usd_numeric" in df.columns and salary_count > 10:
-            print(f"\n 📈 Pearson correlation with salary (numeric features):")
-            numeric_cols = [c for c in self.numeric_columns if c in features.columns]
-            # Use unscaled values for readable correlation
-            temp = pd.DataFrame(index=df.index)
-            temp["salary_usd_numeric"] = df["salary_usd_numeric"]
-            for col in numeric_cols:
-                # Rebuild unscaled numeric features for correlation
-                temp[col] = self._build_numeric_features(df).get(col, 0)
-            for col in numeric_cols:
-                corr = temp[[col, "salary_usd_numeric"]].dropna().corr().iloc[0, 1]
-                bar = "+" * int(abs(corr) * 20) if not np.isnan(corr) else "?"
-                sign = "+" if corr > 0 else "-"
-                print(f"    {col:<25} {sign}{abs(corr):.3f}  {bar}")
-
-        print(f"{'='*70}\n")
 
     # ──────────────────────────────────────────────
     # save / load

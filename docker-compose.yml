@@ -1,6 +1,23 @@
 version: "3.9"
 
 services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: joblens
+      POSTGRES_PASSWORD: joblens
+      POSTGRES_DB: joblens
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U joblens"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   api:
     build:
       context: .
@@ -8,15 +25,17 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      # Mount output and models so local changes persist
       - ./output:/app/output
       - ./pipeline/models:/app/pipeline/models
       - ./data:/app/data
     environment:
-      - DATABASE_URL=sqlite:///./data/jobs.db
+      - DATABASE_URL=postgresql://joblens:joblens@db:5432/joblens
       - MODEL_DIR=/app/pipeline/models
       - DATA_DIR=/app/output
       - ENVIRONMENT=development
+    depends_on:
+      db:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -35,3 +54,6 @@ services:
     depends_on:
       api:
         condition: service_healthy
+
+volumes:
+  pgdata:
