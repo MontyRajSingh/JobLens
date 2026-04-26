@@ -24,7 +24,7 @@ from sklearn.preprocessing import StandardScaler
 
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from config import SKILL_LIST, COL_INDEX
+from config import SKILL_LIST, COL_INDEX, COMPANY_TIERS
 from utils.text_utils import extract_experience
 
 logger = logging.getLogger(__name__)
@@ -276,7 +276,23 @@ class FeatureEngineer:
         else:
             nf["company_rating"] = self.company_rating_mean
 
+        # company_tier_score
+        nf["company_tier_score"] = df["company_name"].apply(self._get_company_tier_score)
+
         return nf
+
+    def _get_company_tier_score(self, company_name) -> int:
+        """Assign 3 for Tier 1, 2 for Tier 2, 1 for others."""
+        if pd.isna(company_name):
+            return 1
+        name = str(company_name).lower()
+        # Check Tier 1
+        if any(t in name for t in COMPANY_TIERS["tier_1"]):
+            return 3
+        # Check Tier 2
+        if any(t in name for t in COMPANY_TIERS["tier_2"]):
+            return 2
+        return 1
 
     @staticmethod
     def _compute_city_tier(city, country) -> int:
@@ -349,8 +365,10 @@ class FeatureEngineer:
         bf["is_remote"] = remote_col.str.lower().str.contains("remote").astype(int)
         bf["is_hybrid"] = remote_col.str.lower().str.contains("hybrid").astype(int)
 
-        # FAANG
-        bf["is_faang"] = df["is_faang"].replace({"False": 0, "True": 1, False: 0, True: 1}).fillna(0).astype(int) if "is_faang" in df.columns else 0
+        # Company Tiers (legacy compat or binary flag)
+        bf["is_tier_1"] = df["company_name"].apply(
+            lambda x: 1 if any(t in str(x).lower() for t in COMPANY_TIERS["tier_1"]) else 0
+        ) if "company_name" in df.columns else 0
 
         # Equity / Bonus
         bf["has_equity"] = df["has_equity"].replace({"False": 0, "True": 1, False: 0, True: 1}).fillna(0).astype(int) if "has_equity" in df.columns else 0

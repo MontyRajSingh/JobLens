@@ -1,0 +1,50 @@
+name: Weekly Model Retrain
+
+on:
+  schedule:
+    # Runs at 03:00 UTC every Sunday
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+
+jobs:
+  retrain:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Retrain Salary Model
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          # The training script should read from DB or output/jobs_cleaned.csv
+          python pipeline/train.py
+
+      - name: Commit and Push new model
+        run: |
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          # Stage the new model files
+          git add pipeline/models/
+          
+          if git diff-index --quiet HEAD; then
+            echo "Model didn't change significantly. Exiting."
+          else
+            git commit -m "🤖 Auto-retrain: Updated salary prediction model [skip ci]"
+            git push
+          fi

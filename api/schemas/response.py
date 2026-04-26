@@ -20,6 +20,8 @@ class PredictResponse(BaseModel):
     similar_jobs_count: int = Field(default=0, description="Count of similar salary jobs in training data")
     model_name: str = Field(..., description="Name of the model used")
     model_rmse: Optional[float] = Field(default=None, description="Model RMSE on test set")
+    skill_premiums: Dict[str, float] = Field(default={}, description="Estimated salary boost per skill")
+    career_progression: Dict[str, Any] = Field(default={}, description="Career path suggestions")
 
 
 class JobRecord(BaseModel):

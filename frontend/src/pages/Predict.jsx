@@ -360,6 +360,43 @@ export default function Predict() {
                 <Award className="ml-auto text-brand-accent" size={32} />
               </div>
 
+              {/* Skill Premiums */}
+              {result.skill_premiums && Object.keys(result.skill_premiums).length > 0 && (
+                <div className="brutal-card p-6 bg-brand-500/10 border-brand-500">
+                  <p className="text-brand-500 font-bold uppercase tracking-widest mb-4">SKILL PREMIUMS (EST.)</p>
+                  <div className="space-y-3">
+                    {Object.entries(result.skill_premiums).map(([skill, premium]) => (
+                      <div key={skill} className="flex justify-between items-center bg-black/40 p-3 border border-white/10">
+                        <span className="text-white font-bold">{skill}</span>
+                        <span className="text-brand-400 font-bold">+${premium.toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Career Progression */}
+              {result.career_progression && (
+                <div className="brutal-card p-6 bg-brand-accent/10 border-brand-accent">
+                  <p className="text-brand-accent font-bold uppercase tracking-widest mb-4">CAREER PATH</p>
+                  <div className="p-4 bg-black/40 border border-white/10 mb-4">
+                    <p className="text-slate-400 text-xs font-bold uppercase mb-1">NEXT STEP</p>
+                    <p className="text-white text-xl font-bold">{result.career_progression.next_title}</p>
+                    <p className="text-brand-accent font-bold mt-1">+{result.career_progression.estimated_jump_percent}% SALARY JUMP</p>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-slate-400 text-xs font-bold uppercase">SKILLS TO MASTER</p>
+                    <div className="flex flex-wrap gap-2">
+                      {result.career_progression.skills_to_acquire?.map(skill => (
+                        <span key={skill} className="px-3 py-1 bg-white/5 border border-white/10 text-xs font-bold uppercase text-white">
+                          {skill}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Model info */}
               <div className="flex items-center justify-between font-bold text-xs uppercase text-slate-500 border-t-2 border-white/20 pt-4">
                 <span>MODEL: {result.model_name} v{result.model_version}</span>
