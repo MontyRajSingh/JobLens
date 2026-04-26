@@ -22,6 +22,8 @@ from typing import List, Tuple, Optional
 from collections import Counter
 
 import pandas as pd
+from dotenv import load_dotenv
+load_dotenv()
 
 from config import (
     OUTPUT_DIR, MAX_JOBS_PER_SEARCH, ENABLED_SOURCES,
@@ -135,11 +137,34 @@ def run_pipeline(
                     for job in jobs:
                         job["city"] = city_search
 
+                    # --- Incremental Save ---
+                    if jobs:
+                        try:
+                            # 1. Generate dedup keys
+                            import hashlib
+                            for job in jobs:
+                                if not job.get("dedup_key"):
+                                    company = (job.get("company_name") or "").lower()
+                                    title = (job.get("job_title") or "").lower()
+                                    city = (job.get("city") or "").lower()
+                                    job["dedup_key"] = hashlib.md5(
+                                        f"{company}{title}{city}".encode()
+                                    ).hexdigest()[:12]
+                            
+                            # 2. Update Database
+                            from api.db.loader import save_jobs_to_db
+                            db_count = save_jobs_to_db(jobs)
+                            
+                            # 3. Append to master CSV
+                            import pandas as pd
+                            master_path = os.path.join(OUTPUT_DIR, "jobs_master.csv")
+                            pd.DataFrame(jobs).to_csv(master_path, mode='a', index=False, header=not os.path.exists(master_path))
+                            
+                            logger.info("✅ [%s] Saved %d jobs (DB + CSV)", src_name.upper(), len(jobs))
+                        except Exception as save_err:
+                            logger.warning("⚠️  Incremental save failed: %s", save_err)
+
                     all_jobs.extend(jobs)
-                    logger.info(
-                        "✅ [%s] '%s' in '%s': %d jobs collected",
-                        src_name.upper(), keyword, city_search, len(jobs),
-                    )
 
                 except Exception as e:
                     logger.error("❌ [%s] '%s' in '%s' failed: %s", src_name.upper(), keyword, city_search, e)
