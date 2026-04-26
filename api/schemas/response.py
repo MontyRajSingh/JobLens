@@ -42,7 +42,7 @@ class JobRecord(BaseModel):
     job_link: Optional[str] = None
     has_equity: Optional[bool] = None
     has_bonus: Optional[bool] = None
-    is_faang: Optional[int] = None
+    company_tier_score: Optional[int] = None
     industry: Optional[str] = None
 
 
