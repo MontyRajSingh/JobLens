@@ -63,53 +63,91 @@ def _ensure_loaded(model_dir: str = DEFAULT_MODEL_DIR) -> None:
 
 def predict_salary(input_dict: Dict, model_dir: str = DEFAULT_MODEL_DIR) -> Dict:
     """
-    Predict salary for a single job specification.
-
-    Input dict keys:
-        job_title (str): Required. Job title.
-        city (str): Required. City name from SCRAPE_CITIES.
-        seniority_level (str): Optional. Seniority label.
-        skills (list[str]): Optional. List of skill names.
-        experience_years (float): Optional. Years of experience.
-        employment_type (str): Optional. e.g. "Full-time".
-        remote_type (str): Optional. "Remote", "Hybrid", "On-site".
-        company_name (str): Optional. Company name.
-        education_required (str): Optional. e.g. "Bachelor's".
-        has_equity (bool): Optional. Has equity compensation.
-        has_bonus (bool): Optional. Has bonus compensation.
-
-    Args:
-        input_dict: Job specification dict.
-        model_dir: Path to model artifacts directory.
-
-    Returns:
-        Rich prediction result dict from SalaryPredictor.predict_single().
+    Predict salary for a single job specification with Skill Premium Intelligence.
     """
     _ensure_loaded(model_dir)
 
-    # Convert input_dict to single-row DataFrame in scraper output format
-    row = _build_scraper_format_row(input_dict)
-    row_df = pd.DataFrame([row])
+    # 1. Calculate BASE prediction (No skills)
+    base_input = input_dict.copy()
+    base_input["skills"] = []
+    base_row = _build_scraper_format_row(base_input)
+    base_features = _feature_engineer.transform(pd.DataFrame([base_row]))
+    base_result = _predictor.predict_single(base_features.iloc[0].to_dict())
+    base_salary = base_result.get("predicted_salary_usd", 82500)
 
-    # Transform to feature space
-    features = _feature_engineer.transform(row_df)
+    # 2. Calculate AI prediction (With skills)
+    full_row = _build_scraper_format_row(input_dict)
+    full_features = _feature_engineer.transform(pd.DataFrame([full_row]))
+    result = _predictor.predict_single(full_features.iloc[0].to_dict())
+    
+    # 3. Apply Skill Premium Intelligence (The "Value Lock")
+    skill_bonuses = []
+    total_market_premium = 0
+    
+    # Load calculated premiums
+    premium_path = os.path.join(model_dir, "skill_premiums.json")
+    premiums = {}
+    if os.path.exists(premium_path):
+        with open(premium_path, "r") as f:
+            premiums = json.load(f)
+            
+    user_skills = input_dict.get("skills", [])
+    for skill in user_skills:
+        bonus = premiums.get(skill, 500) # Default small bonus for unknown skills
+        total_market_premium += bonus
+        skill_bonuses.append({"skill": skill, "bonus": int(bonus)})
 
-    # Predict
-    feature_row = features.iloc[0].to_dict()
-    result = _predictor.predict_single(feature_row)
+    # Fallback/Sanity Check
+    predicted = result.get("predicted_salary_usd", 0)
+    
+    # If AI prediction is lower than Base + Market Premium, we "Premium Boost" it
+    # This prevents the "adding skills lost value" bug
+    boosted_salary = max(predicted, base_salary + (total_market_premium * 0.5)) 
 
-    # Fallback: if prediction is 0 or None, use training median from metadata
-    if not result.get("predicted_salary_usd"):
-        meta_path = os.path.join(model_dir, "metadata.json")
-        fallback = 82500  # hard default
-        if os.path.exists(meta_path):
-            with open(meta_path, "r") as f:
-                meta = json.load(f)
-            fallback = meta.get("salary_mean", fallback)
-        logger.warning("Prediction was 0/None — using fallback salary $%.0f", fallback)
-        result["predicted_salary_usd"] = int(fallback)
-        result["confidence_low"] = int(fallback * 0.7)
-        result["confidence_high"] = int(fallback * 1.3)
+    # 4. Apply Company Tier Prestige (The "Brand Bonus")
+    company_name = input_dict.get("company_name", "").lower()
+    tier_info = {"tier": 3, "label": "Tier 3: Standard", "bonus": 0}
+    
+    # Load tier definitions
+    tier_path = os.path.join(model_dir, "company_tiers.json")
+    if os.path.exists(tier_path):
+        with open(tier_path, "r") as f:
+            tiers = json.load(f)
+            
+        if any(c.lower() in company_name for c in tiers["Tier 1"]["companies"]):
+            tier_info = {"tier": 1, "label": "Tier 1: Prestige", "bonus": 45000}
+        elif any(c.lower() in company_name for c in tiers["Tier 2"]["companies"]):
+            tier_info = {"tier": 2, "label": "Tier 2: Scale", "bonus": 15000}
+            
+    # 5. Apply Academic Intelligence (Degree Bonus)
+    education = input_dict.get("education_required", "").lower()
+    edu_bonus = 0
+    edu_label = ""
+    
+    if "phd" in education or "doctorate" in education:
+        edu_bonus = 25000
+        edu_label = "PhD Specialist Premium"
+    elif "master" in education:
+        edu_bonus = 10000
+        edu_label = "Master's Degree Lift"
+        
+    # Final Boosted Salary
+    boosted_salary += (tier_info["bonus"] + edu_bonus)
+    
+    result["predicted_salary_usd"] = int(boosted_salary)
+    result["skill_bonuses"] = skill_bonuses
+    result["total_skill_premium"] = int(total_market_premium)
+    result["company_tier"] = tier_info
+    result["academic_bonus"] = {"label": edu_label, "bonus": edu_bonus} if edu_bonus > 0 else None
+
+    # Confidence logic
+    if not predicted:
+        result["predicted_salary_usd"] = int(base_salary + total_market_premium + tier_info["bonus"] + edu_bonus)
+        result["confidence_low"] = int(result["predicted_salary_usd"] * 0.8)
+        result["confidence_high"] = int(result["predicted_salary_usd"] * 1.2)
+    else:
+        result["confidence_low"] = int(boosted_salary * 0.85)
+        result["confidence_high"] = int(boosted_salary * 1.15)
 
     return result
 
