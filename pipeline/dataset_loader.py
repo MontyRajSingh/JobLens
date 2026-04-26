@@ -20,7 +20,7 @@ from typing import Optional
 import pandas as pd
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from utils.text_utils import infer_seniority, extract_skills, get_company_tier_score, extract_experience
+from utils.text_utils import infer_seniority, extract_skills, is_faang, extract_experience
 
 logger = logging.getLogger(__name__)
 
@@ -191,9 +191,9 @@ class KaggleDatasetLoader:
             lambda t: infer_seniority(t) if pd.notna(t) else None
         )
 
-        # ── 7. Company Tier score ──
-        out["company_tier_score"] = out["company_name"].apply(
-            lambda c: get_company_tier_score(c) if pd.notna(c) else 1
+        # ── 7. FAANG flag ──
+        out["is_faang"] = out["company_name"].apply(
+            lambda c: is_faang(c) if pd.notna(c) else 0
         )
 
         # ── 8. Equity / Bonus from Benefits ──
@@ -276,7 +276,7 @@ class KaggleDatasetLoader:
             "job_title", "company_name", "city", "salary_usd_numeric",
             "experience_required", "seniority_level", "education_required",
             "employment_type", "remote_type", "skills_required",
-            "source_website", "has_equity", "has_bonus", "company_tier_score",
+            "source_website", "has_equity", "has_bonus", "is_faang",
         ]
         print(f"\n{'Column':<25} {'Fill Rate':>10}  {'Count':>8}")
         print("-" * 50)

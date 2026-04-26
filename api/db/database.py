@@ -81,7 +81,7 @@ jobs_table = Table(
     Column("job_id", String(100)),
     Column("source_website", String(50)),
     Column("dedup_key", String(20), unique=True, index=True),
-    Column("company_tier_score", Integer),
+    Column("is_faang", Integer),
     Column("cost_of_living_index", Integer),
     Column("date_posted_raw", String(100)),
     Column("applicant_count", Integer),

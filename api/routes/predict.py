@@ -69,8 +69,6 @@ async def predict_salary_endpoint(request: PredictRequest):
             similar_jobs_count=result.get("similar_jobs_count", 0),
             model_name=result["model_name"],
             model_rmse=model_rmse,
-            skill_premiums=result.get("skill_premiums", {}),
-            career_progression=result.get("career_progression", {}),
         )
 
     except FileNotFoundError:

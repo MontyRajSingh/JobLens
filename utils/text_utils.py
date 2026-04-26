@@ -14,7 +14,7 @@ from typing import Optional, Dict
 
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from config import SKILL_LIST, COMPANY_TIERS, SENIORITY_FROM_LINKEDIN
+from config import SKILL_LIST, FAANG, SENIORITY_FROM_LINKEDIN
 
 logger = logging.getLogger(__name__)
 
@@ -350,24 +350,19 @@ def parse_indeed_metadata(desc: str) -> Dict:
 # FAANG check
 # ──────────────────────────────────────────────
 
-def get_company_tier_score(company_name: str) -> int:
+def is_faang(company_name: str) -> int:
     """
-    Assign a tier score (3, 2, 1) based on company prestige.
+    Check if a company is in the FAANG-tier set.
 
     Args:
         company_name: Company name string.
 
     Returns:
-        3 for Tier 1, 2 for Tier 2, 1 for others.
+        1 if FAANG-tier, 0 otherwise.
     """
     if not company_name:
-        return 1
-    name = company_name.strip().lower()
-    if any(t in name for t in COMPANY_TIERS["tier_1"]):
-        return 3
-    if any(t in name for t in COMPANY_TIERS["tier_2"]):
-        return 2
-    return 1
+        return 0
+    return 1 if company_name.strip().lower() in FAANG else 0
 
 
 # ──────────────────────────────────────────────

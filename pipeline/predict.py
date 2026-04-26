@@ -30,8 +30,8 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from config import COL_INDEX, COMPANY_TIERS
-from utils.text_utils import get_company_tier_score, infer_seniority
+from config import COL_INDEX, FAANG
+from utils.text_utils import is_faang, infer_seniority
 from pipeline.preprocessing import FeatureEngineer
 from pipeline.model import SalaryPredictor
 
@@ -167,7 +167,7 @@ def _build_scraper_format_row(input_dict: Dict) -> Dict:
         "job_id": "",
         "source_website": input_dict.get("source_website", "LinkedIn"),
         "dedup_key": "",
-        "company_tier_score": get_company_tier_score(company),
+        "is_faang": is_faang(company),
         "cost_of_living_index": COL_INDEX.get(city, 80),
         "date_posted_raw": None,
         "applicant_count": None,
