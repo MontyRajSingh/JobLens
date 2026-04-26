@@ -224,8 +224,6 @@ class SalaryPredictor:
             "percentile": percentile,
             "model_name": self.best_model_name,
             "model_version": self.MODEL_VERSION,
-            "skill_premiums": self.get_skill_premiums(X.iloc[0].to_dict()),
-            "career_progression": self.get_career_progression(feature_dict),
         }
 
     # ──────────────────────────────────────────────
@@ -257,57 +255,6 @@ class SalaryPredictor:
             {"feature": self.feature_names[i], "importance": float(importances[i])}
             for i in indices
         ]
-    # ──────────────────────────────────────────────
-    # Premium Intelligence (Skills & Career)
-    # ──────────────────────────────────────────────
-
-    def get_skill_premiums(self, feature_row: dict) -> Dict[str, float]:
-        """
-        Estimate the salary premium for each skill present in the row.
-        
-        Calculated as: (Feature Importance * Predictor Std) normalized to USD.
-        """
-        if self.best_model is None:
-            return {}
-
-        importances = {}
-        if hasattr(self.best_model, "feature_importances_"):
-            importances = dict(zip(self.feature_names, self.best_model.feature_importances_))
-        
-        premiums = {}
-        # Only look at skill_ columns
-        for col, val in feature_row.items():
-            if col.startswith("skill_") and val > 0:
-                # Rough heuristic: Importance * 0.2 * Predicted Value (simplified)
-                importance = importances.get(col, 0)
-                # Skill premium is typically 5-15% of salary for high-demand skills
-                premium = importance * 50000  # Scaling factor for visibility
-                premiums[col.replace("skill_", "").replace("_", " ").title()] = round(premium, -2)
-        
-        return dict(sorted(premiums.items(), key=lambda x: x[1], reverse=True)[:5])
-
-    def get_career_progression(self, current_job: dict) -> dict:
-        """
-        Predict next logical step and salary increase.
-        """
-        title = str(current_job.get("job_title", "")).lower()
-        seniority = str(current_job.get("seniority_level", ""))
-        
-        next_step = "Senior " + title.title()
-        salary_boost = 0.15 # 15% jump
-        
-        if "senior" in title or "lead" in title:
-            next_step = "Staff / Principal " + title.replace("senior", "").replace("lead", "").strip().title()
-            salary_boost = 0.20
-        elif "entry" in seniority.lower() or "associate" in seniority.lower():
-            next_step = title.title() + " (Mid-Level)"
-            salary_boost = 0.25
-            
-        return {
-            "next_title": next_step,
-            "estimated_jump_percent": int(salary_boost * 100),
-            "skills_to_acquire": ["Kubernetes", "System Design", "MLOps"] if "engineer" in title else ["Deep Learning", "A/B Testing", "Tableau"]
-        }
 
     # ──────────────────────────────────────────────
     # Save / Load

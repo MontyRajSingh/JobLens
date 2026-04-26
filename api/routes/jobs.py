@@ -99,7 +99,7 @@ async def search_jobs(
             f"SELECT id, job_title, company_name, city, salary, salary_usd_numeric, "
             f"seniority_level, experience_required, remote_type, employment_type, "
             f"skills_required, source_website, job_link, has_equity, has_bonus, "
-            f"company_tier_score, industry "
+            f"is_faang, industry "
             f"FROM jobs WHERE {where_clause} "
             f"ORDER BY salary_usd_numeric DESC NULLS LAST "
             f"LIMIT :limit OFFSET :offset"
@@ -127,7 +127,7 @@ async def search_jobs(
                 job_link=row[12],
                 has_equity=bool(row[13]) if row[13] is not None else None,
                 has_bonus=bool(row[14]) if row[14] is not None else None,
-                company_tier_score=row[15],
+                is_faang=row[15],
                 industry=row[16],
             ))
 
@@ -155,7 +155,7 @@ async def get_job(job_id: int, db: Session = Depends(get_db)):
             "SELECT id, job_title, company_name, city, salary, salary_usd_numeric, "
             "seniority_level, experience_required, remote_type, employment_type, "
             "skills_required, source_website, job_link, has_equity, has_bonus, "
-            "company_tier_score, industry "
+            "is_faang, industry "
             "FROM jobs WHERE id = :job_id"
         )
         row = db.execute(text(sql), {"job_id": job_id}).fetchone()
@@ -179,7 +179,7 @@ async def get_job(job_id: int, db: Session = Depends(get_db)):
             job_link=row[12],
             has_equity=bool(row[13]) if row[13] is not None else None,
             has_bonus=bool(row[14]) if row[14] is not None else None,
-            company_tier_score=row[15],
+            is_faang=row[15],
             industry=row[16],
         )
 
