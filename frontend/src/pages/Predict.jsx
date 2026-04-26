@@ -23,7 +23,7 @@ const SKILLS = [
   'NLP', 'Deep Learning', 'Git', 'Azure', 'GCP', 'Scikit-learn', 'Pandas',
   'NoSQL', 'Linux', 'REST API', 'Agile', 'CI/CD', 'Airflow', 'Hadoop',
   'Scala', 'R', 'Excel', 'Kafka', 'Redis', 'GraphQL', 'TypeScript',
-  'C++', 'Golang', 'Rust', 'Swift', 'Terraform',
+  'C++', 'Golang', 'Rust', 'Swift', 'Terraform', 'GenAI',
 ];
 
 export default function Predict() {
@@ -359,6 +359,69 @@ export default function Predict() {
                 </div>
                 <Award className="ml-auto text-brand-accent" size={32} />
               </div>
+
+              {/* Skill Premiums */}
+              {result.skill_bonuses && result.skill_bonuses.length > 0 && (
+                <div className="brutal-card p-6 border-brand-500 bg-brand-500/5">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="display-text text-xl text-brand-500">SKILL PREMIUM INTELLIGENCE</h3>
+                    <div className="bg-brand-500 text-black px-2 py-1 text-xs font-bold shadow-brutal-mini">
+                      TOTAL LIFT: +${result.total_skill_premium?.toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    {result.skill_bonuses.map((sb, i) => (
+                      <div key={i} className="flex justify-between items-center border-b border-white/10 pb-2 last:border-0">
+                        <span className="font-bold text-white uppercase tracking-wider">{sb.skill}</span>
+                        <span className="text-brand-500 font-mono font-bold">+${sb.bonus.toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-4 uppercase font-bold tracking-tighter">
+                    * CALCULATED BASED ON MARKET MEDIANS FOR THIS SENIORITY LEVEL
+                  </p>
+                </div>
+              )}
+
+              {/* Company Tier Badge */}
+              {result.company_tier && result.company_tier.tier < 3 && (
+                <div className={`brutal-card p-6 flex items-center gap-6 ${
+                  result.company_tier.tier === 1 ? 'border-brand-accent bg-brand-accent/10' : 'border-white bg-white/5'
+                }`}>
+                  <div className={`w-16 h-16 border-2 border-black flex items-center justify-center shrink-0 shadow-brutal ${
+                    result.company_tier.tier === 1 ? 'bg-brand-accent' : 'bg-white'
+                  }`}>
+                    <Award className="text-black" size={32} />
+                  </div>
+                  <div>
+                    <p className={`font-bold uppercase tracking-widest text-lg ${
+                      result.company_tier.tier === 1 ? 'text-brand-accent' : 'text-white'
+                    }`}>
+                      {result.company_tier.label}
+                    </p>
+                    <p className="text-slate-400 font-bold uppercase text-sm">
+                      PRESTIGE BONUS APPLIED: +${result.company_tier.bonus?.toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Academic Bonus Badge */}
+              {result.academic_bonus && (
+                <div className="brutal-card p-6 flex items-center gap-6 border-white bg-white/5">
+                  <div className="w-16 h-16 border-2 border-black flex items-center justify-center shrink-0 shadow-brutal-pink bg-white">
+                    <Award className="text-black" size={32} />
+                  </div>
+                  <div>
+                    <p className="font-bold uppercase tracking-widest text-lg text-white">
+                      {result.academic_bonus.label}
+                    </p>
+                    <p className="text-slate-400 font-bold uppercase text-sm">
+                      ACADEMIC LIFT APPLIED: +${result.academic_bonus.bonus?.toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Model info */}
               <div className="flex items-center justify-between font-bold text-xs uppercase text-slate-500 border-t-2 border-white/20 pt-4">

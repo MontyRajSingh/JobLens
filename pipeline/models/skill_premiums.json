@@ -1,0 +1,19 @@
+{
+  "GenAI": 15000,
+  "MongoDB": 1722,
+  "TensorFlow": 766,
+  "PyTorch": 766,
+  "Scikit-learn": 766,
+  "Go": 733,
+  "Data Analysis": 680,
+  "Node.js": 500,
+  "Excel": 500,
+  "Python": 389,
+  "Swift": 389,
+  "Kotlin": 389,
+  "Machine Learning": 389,
+  "GCP": 389,
+  "Terraform": 389,
+  "CI/CD": 389,
+  "SQL": 211
+}

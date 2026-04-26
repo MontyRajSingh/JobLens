@@ -93,15 +93,21 @@ async def search_jobs(
         result = db.execute(text(count_sql), params)
         total = result.scalar() or 0
 
+        # Sorting (Default: Newest First)
+        order_by = "scraped_at DESC NULLS LAST"
+        
+        # If searching for salary specifically, or if user requests it (future), 
+        # we could change this, but for now: Newest First.
+        
         # Fetch page
         offset = (page - 1) * page_size
         data_sql = (
             f"SELECT id, job_title, company_name, city, salary, salary_usd_numeric, "
             f"seniority_level, experience_required, remote_type, employment_type, "
             f"skills_required, source_website, job_link, has_equity, has_bonus, "
-            f"is_faang, industry "
-            f"FROM jobs WHERE {where_clause} "
-            f"ORDER BY salary_usd_numeric DESC NULLS LAST "
+            f"is_faang, industry FROM jobs "
+            f"WHERE {where_clause} "
+            f"ORDER BY {order_by} "
             f"LIMIT :limit OFFSET :offset"
         )
         params["limit"] = page_size

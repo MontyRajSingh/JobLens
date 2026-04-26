@@ -1,0 +1,56 @@
+{
+  "Tier 1": {
+    "premium": -100,
+    "multiplier": 1.0,
+    "companies": [
+      "anthropic",
+      "apple",
+      "openai",
+      "amazon",
+      "netflix",
+      "google",
+      "microsoft",
+      "nvidia",
+      "deepmind",
+      "meta",
+      "NVIDIA",
+      "OpenAI",
+      "Microsoft",
+      "Uber",
+      "Airbnb",
+      "Lyft",
+      "Stripe",
+      "Palantir"
+    ]
+  },
+  "Tier 2": {
+    "premium": 83,
+    "multiplier": 1.0,
+    "companies": [
+      "Deloitte",
+      "Accenture",
+      "Infosys",
+      "TCS",
+      "IBM",
+      "Oracle",
+      "SAP",
+      "Capgemini",
+      "Wipro",
+      "Cognizant",
+      "HCL",
+      "Tech Mahindra",
+      "PwC",
+      "EY",
+      "KPMG",
+      "Cisco",
+      "Intel",
+      "HP",
+      "Salesforce"
+    ]
+  },
+  "Tier 3": {
+    "premium": 0,
+    "multiplier": 1.0,
+    "companies": []
+  }
+}
