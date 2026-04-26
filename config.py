@@ -16,7 +16,7 @@ load_dotenv()
 # ──────────────────────────────────────────────
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
 MAX_JOBS_PER_SEARCH = 30
-ENABLED_SOURCES = ["linkedin", "indeed", "glassdoor"]
+ENABLED_SOURCES = ["indeed", "levelsfyi", "payscale", "ziprecruiter"]
 
 # ──────────────────────────────────────────────
 # Cities to scrape: (search_location, linkedin_location, currency, usd_rate)
@@ -32,6 +32,9 @@ SCRAPE_CITIES = [
     ("Singapore",               "Singapore",                          "SGD", 0.74),
     ("Dubai, UAE",              "Dubai, United Arab Emirates",        "AED", 0.27),
     ("Bengaluru, India",        "Bengaluru, Karnataka",               "INR", 0.012),
+    ("Gurugram, India",         "Gurugram, Haryana",                  "INR", 0.012),
+    ("Hyderabad, India",        "Hyderabad, Telangana",               "INR", 0.012),
+    ("Pune, India",             "Pune, Maharashtra",                  "INR", 0.012),
 ]
 
 # ──────────────────────────────────────────────
@@ -105,6 +108,9 @@ COL_INDEX = {
     "Singapore": 88,
     "Dubai, UAE": 68,
     "Bengaluru, India": 28,
+    "Gurugram, India": 30,
+    "Hyderabad, India": 26,
+    "Pune, India": 25,
     "Mumbai, India": 32,
 }
 

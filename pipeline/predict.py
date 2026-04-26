@@ -187,30 +187,23 @@ def _build_scraper_format_row(input_dict: Dict) -> Dict:
 
 def interactive_predict():
     """Interactive CLI for salary prediction."""
-    print(f"\n{'='*60}")
-    print(f" 🔮 JOBLENS SALARY PREDICTOR — Interactive Mode")
-    print(f"{'='*60}\n")
+    print("\n🔮 JOBLENS SALARY PREDICTOR\n")
 
-    # Check if model exists
     if not os.path.exists(os.path.join(DEFAULT_MODEL_DIR, "model.pkl")):
-        print("❌ No trained model found. Run training first:")
-        print("   python -m pipeline.train --data output/jobs_master.csv")
+        print("❌ No trained model found. Run training first.")
         return
 
     while True:
         try:
-            # Get inputs
-            title = input("\n 📋 Job title (or 'quit'): ").strip()
+            title = input("\nJob title (or 'quit'): ").strip()
             if title.lower() in ("quit", "exit", "q"):
-                print("\nGoodbye! 👋\n")
                 break
 
-            city = input(" 🌍 City (e.g. 'New York, NY, USA'): ").strip()
-            seniority = input(" 📈 Seniority (e.g. 'Senior (5+ years)') [Enter to auto]: ").strip() or None
-            skills_input = input(" 🛠  Skills (comma-separated): ").strip()
-            skills = [s.strip() for s in skills_input.split(",") if s.strip()] if skills_input else []
+            city = input("City: ").strip()
+            seniority = input("Seniority [Enter to auto]: ").strip() or None
+            skills_input = input("Skills (comma-separated): ").strip()
+            skills = [s.strip() for s in skills_input.split(",")] if skills_input else []
 
-            # Predict
             result = predict_salary({
                 "job_title": title,
                 "city": city,
@@ -218,29 +211,15 @@ def interactive_predict():
                 "skills": skills,
             })
 
-            # Display result
-            print(f"\n {'='*50}")
-            print(f" 💰 PREDICTION RESULT")
-            print(f" {'='*50}")
-            print(f"  Predicted salary:  ${result['predicted_salary_usd']:,}")
-            print(f"  Confidence range:  ${result['confidence_low']:,} — ${result['confidence_high']:,}")
-            print(f"  Salary percentile: {result['percentile']}th")
-            print(f"  Similar jobs:      {result['similar_jobs_count']}")
-            print(f"  Model:             {result['model_name']} v{result['model_version']}")
-
-            if result.get("top_features"):
-                print(f"\n  📊 Top contributing features:")
-                for feat in result["top_features"]:
-                    print(f"     {feat['feature']:<25} = {feat['value']}  ({feat['impact']})")
-
-            print(f" {'='*50}")
+            print(f"\nPredicted salary: ${result['predicted_salary_usd']:,}")
+            print(f"Confidence range: ${result['confidence_low']:,} — ${result['confidence_high']:,}")
+            print(f"Percentile: {result['percentile']}th")
+            print(f"Model: {result['model_name']} v{result['model_version']}")
 
         except KeyboardInterrupt:
-            print("\n\nGoodbye! 👋\n")
             break
         except Exception as e:
-            print(f"\n❌ Error: {e}")
-            logger.exception("Prediction error")
+            print(f"\nError: {e}")
 
 
 if __name__ == "__main__":

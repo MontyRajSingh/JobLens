@@ -1,9 +1,9 @@
 """
 model.py — SalaryPredictor class for training and inference.
 
-Trains three models (XGBoost, Random Forest, Ridge) on engineered features,
-selects the best by RMSE, and provides predict/predict_single methods with
-confidence intervals, salary percentile, and feature importance analysis.
+Trains a Random Forest model on engineered features,
+and provides predict/predict_single methods with
+confidence intervals and salary percentile.
 
 Usage:
     predictor = SalaryPredictor()
@@ -21,20 +21,18 @@ from typing import Dict, List, Optional
 import numpy as np
 import pandas as pd
 import joblib
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.linear_model import Ridge
-from xgboost import XGBRegressor
+import xgboost as xgb
 
 logger = logging.getLogger(__name__)
 
 
 class SalaryPredictor:
     """
-    Multi-model salary prediction with automatic model selection.
+    Salary prediction using Random Forest.
 
-    Trains XGBoost, Random Forest, and Ridge; selects best by RMSE.
     Provides confidence intervals and feature importance analysis.
     """
 
@@ -56,16 +54,15 @@ class SalaryPredictor:
 
     def train(self, X: pd.DataFrame, y: pd.Series) -> Dict:
         """
-        Train three models, evaluate, and select the best.
+        Train a Random Forest model and evaluate.
 
         Steps:
         1. Drop rows where y < 20000 or y > 500000
         2. 80/20 split (random_state=42)
-        3. Train XGBoost, Random Forest, Ridge
+        3. Train Random Forest
         4. Evaluate RMSE, MAE, R² on test set
-        5. Select best by lowest RMSE
-        6. Store residuals std for confidence intervals
-        7. Store training salary percentiles
+        5. Store residuals std for confidence intervals
+        6. Store training salary percentiles
 
         Args:
             X: Feature DataFrame.
@@ -100,63 +97,69 @@ class SalaryPredictor:
             "p90": float(np.percentile(y_train, 90)),
         }
 
-        # Step 3: Train models
-        models = {
-            "XGBoost": XGBRegressor(
-                n_estimators=500,
-                learning_rate=0.05,
-                max_depth=6,
-                subsample=0.8,
-                colsample_bytree=0.8,
-                random_state=42,
-                early_stopping_rounds=50,
-                eval_metric="rmse",
-                verbosity=0,
-            ),
-            "Random Forest": RandomForestRegressor(
-                n_estimators=300,
-                max_depth=10,
-                min_samples_leaf=5,
-                random_state=42,
-                n_jobs=-1,
-            ),
-            "Ridge": Ridge(alpha=1.0),
+        # Step 3: Train Random Forest (Baseline)
+        logger.info("Training Random Forest...")
+        rf_model = RandomForestRegressor(
+            n_estimators=300,
+            max_depth=10,
+            min_samples_leaf=5,
+            random_state=42,
+            n_jobs=-1,
+        )
+        rf_model.fit(X_train, y_train)
+
+        rf_pred = rf_model.predict(X_test)
+        rf_rmse = float(np.sqrt(mean_squared_error(y_test, rf_pred)))
+        rf_mae = float(mean_absolute_error(y_test, rf_pred))
+        rf_r2 = float(r2_score(y_test, rf_pred))
+
+        self.metrics["Random Forest"] = {"rmse": rf_rmse, "mae": rf_mae, "r2": rf_r2}
+        logger.info("Random Forest — RMSE: $%s | MAE: $%s | R²: %.3f", f"{rf_rmse:,.0f}", f"{rf_mae:,.0f}", rf_r2)
+
+        # Step 4: Train XGBoost with GridSearchCV
+        logger.info("Training XGBoost with GridSearchCV...")
+        xgb_param_grid = {
+            'n_estimators': [100, 300],
+            'max_depth': [4, 6, 8],
+            'learning_rate': [0.05, 0.1],
+            'subsample': [0.8, 1.0]
         }
+        xgb_base = xgb.XGBRegressor(random_state=42, n_jobs=-1)
+        grid_search = GridSearchCV(
+            estimator=xgb_base,
+            param_grid=xgb_param_grid,
+            cv=3,
+            scoring='neg_mean_squared_error',
+            n_jobs=-1,
+            verbose=0
+        )
+        grid_search.fit(X_train, y_train)
+        
+        xgb_model = grid_search.best_estimator_
+        xgb_pred = xgb_model.predict(X_test)
+        xgb_rmse = float(np.sqrt(mean_squared_error(y_test, xgb_pred)))
+        xgb_mae = float(mean_absolute_error(y_test, xgb_pred))
+        xgb_r2 = float(r2_score(y_test, xgb_pred))
+        
+        self.metrics["XGBoost"] = {"rmse": xgb_rmse, "mae": xgb_mae, "r2": xgb_r2}
+        logger.info("XGBoost (Best Params: %s) — RMSE: $%s | MAE: $%s | R²: %.3f", grid_search.best_params_, f"{xgb_rmse:,.0f}", f"{xgb_mae:,.0f}", xgb_r2)
 
-        results = {}
-        for name, model in models.items():
-            logger.info("Training %s...", name)
-            if name == "XGBoost":
-                model.fit(
-                    X_train, y_train,
-                    eval_set=[(X_test, y_test)],
-                    verbose=False,
-                )
-            else:
-                model.fit(X_train, y_train)
-
-            y_pred = model.predict(X_test)
-            rmse = float(np.sqrt(mean_squared_error(y_test, y_pred)))
-            mae = float(mean_absolute_error(y_test, y_pred))
-            r2 = float(r2_score(y_test, y_pred))
-
-            results[name] = {"rmse": rmse, "mae": mae, "r2": r2}
-            self.all_models[name] = model
-            logger.info("%s — RMSE: $%s | MAE: $%s | R²: %.3f", name, f"{rmse:,.0f}", f"{mae:,.0f}", r2)
-
-        # Step 5: Select best
-        self.best_model_name = min(results, key=lambda k: results[k]["rmse"])
-        self.best_model = self.all_models[self.best_model_name]
-        self.metrics = results
+        # Step 5: Select best model
+        if xgb_r2 > rf_r2:
+            self.best_model_name = "XGBoost"
+            self.best_model = xgb_model
+            best_pred = xgb_pred
+        else:
+            self.best_model_name = "Random Forest"
+            self.best_model = rf_model
+            best_pred = rf_pred
+            
+        logger.info("Selected %s as the best model.", self.best_model_name)
 
         # Step 6: Residuals std
-        y_pred_best = self.best_model.predict(X_test)
-        self.test_residuals_std = float(np.std(y_test.values - y_pred_best))
+        self.test_residuals_std = float(np.std(y_test.values - best_pred))
 
-        # Print evaluation table
-        self._print_evaluation(results, y_test, y_pred_best, X_test)
-
-        return results
+        return self.metrics
 
     # ──────────────────────────────────────────────
     # Prediction
@@ -214,23 +217,11 @@ class SalaryPredictor:
             ) / len(self._training_salary_values) * 100)
             percentile = min(99, max(1, percentile))
 
-        # Top features
-        top_features = self._get_top_feature_impacts(feature_dict, predicted)
-
-        # Similar jobs count (within 1 std of training data)
-        similar_count = 0
-        if self._training_salary_values is not None:
-            similar_count = int(np.sum(
-                np.abs(self._training_salary_values - predicted) < self.test_residuals_std
-            ))
-
         return {
             "predicted_salary_usd": round(predicted),
             "confidence_low": round(conf_low),
             "confidence_high": round(conf_high),
             "percentile": percentile,
-            "top_features": top_features,
-            "similar_jobs_count": similar_count,
             "model_name": self.best_model_name,
             "model_version": self.MODEL_VERSION,
         }
@@ -264,83 +255,6 @@ class SalaryPredictor:
             {"feature": self.feature_names[i], "importance": float(importances[i])}
             for i in indices
         ]
-
-    def _get_top_feature_impacts(self, feature_dict: dict, predicted: float) -> List[dict]:
-        """Compute top feature impacts for predict_single result."""
-        importances = self.get_feature_importance(top_n=10)
-        if not importances:
-            return []
-
-        top_features = []
-        total_importance = sum(fi["importance"] for fi in importances) or 1.0
-
-        for fi in importances[:5]:
-            fname = fi["feature"]
-            fval = feature_dict.get(fname, 0)
-            # Approximate impact: proportion of importance × predicted salary
-            impact = fi["importance"] / total_importance * predicted * 0.3
-            sign = "+" if fval > 0 else ""
-            top_features.append({
-                "feature": fname,
-                "value": fval,
-                "impact": f"{sign}${abs(impact):,.0f}",
-            })
-
-        return top_features
-
-    # ──────────────────────────────────────────────
-    # Evaluation printing
-    # ──────────────────────────────────────────────
-
-    def _print_evaluation(self, results: Dict, y_test, y_pred_best, X_test) -> None:
-        """Print evaluation table, feature importances, sample predictions."""
-        print(f"\n{'='*70}")
-        print(f" 🎯 MODEL EVALUATION RESULTS")
-        print(f"{'='*70}")
-
-        # Model comparison table
-        print(f"\n ┌{'─'*58}┐")
-        print(f" │ {'Model':<18}│ {'RMSE':>10} │ {'MAE':>10} │ {'R²':>7} │ {'Best':>5} │")
-        print(f" ├{'─'*58}┤")
-        for name, m in results.items():
-            best_marker = "  ✓  " if name == self.best_model_name else "     "
-            print(f" │ {name:<18}│ ${m['rmse']:>8,.0f} │ ${m['mae']:>8,.0f} │ {m['r2']:>6.3f} │{best_marker}│")
-        print(f" └{'─'*58}┘")
-
-        # Top 20 feature importances
-        top_feats = self.get_feature_importance(top_n=20)
-        if top_feats:
-            print(f"\n 📊 Top 20 Feature Importances ({self.best_model_name}):")
-            for i, fi in enumerate(top_feats, 1):
-                bar = "█" * int(fi["importance"] * 100)
-                print(f"    {i:>2}. {fi['feature']:<30} {fi['importance']:.4f}  {bar}")
-
-        # Sample predictions
-        print(f"\n 🔮 Sample Predictions (10 random):")
-        print(f"    {'Actual':>12} {'Predicted':>12} {'Error':>12}")
-        print(f"    {'─'*12} {'─'*12} {'─'*12}")
-
-        n_samples = min(10, len(y_test))
-        sample_idx = np.random.choice(len(y_test), n_samples, replace=False)
-        y_test_arr = y_test.values
-        for i in sample_idx:
-            actual = y_test_arr[i]
-            pred = y_pred_best[i]
-            error = pred - actual
-            sign = "+" if error > 0 else ""
-            print(f"    ${actual:>10,.0f} ${pred:>10,.0f} {sign}${error:>9,.0f}")
-
-        # Accuracy buckets
-        errors = np.abs(y_test.values - y_pred_best)
-        within_10k = np.mean(errors < 10_000) * 100
-        within_20k = np.mean(errors < 20_000) * 100
-        within_30k = np.mean(errors < 30_000) * 100
-        print(f"\n 🎯 Prediction Accuracy:")
-        print(f"    Within $10k: {within_10k:.1f}%")
-        print(f"    Within $20k: {within_20k:.1f}%")
-        print(f"    Within $30k: {within_30k:.1f}%")
-
-        print(f"\n{'='*70}\n")
 
     # ──────────────────────────────────────────────
     # Save / Load

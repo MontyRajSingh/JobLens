@@ -2,8 +2,9 @@
 main.py — Pipeline orchestrator for JobLens scraping system.
 
 Provides run_pipeline() which loops city × keyword × source, deduplicates,
-and exports results to timestamped CSV/JSON files. Includes a CLI interface
-with --sources and --max-jobs flags, plus a quality report summary.
+and exports results to timestamped CSV/JSON files AND inserts them into
+the PostgreSQL database. Includes a CLI interface with --sources and
+--max-jobs flags, plus a quality report summary.
 
 CLI usage:
     python main.py --sources linkedin
@@ -26,9 +27,10 @@ from config import (
     OUTPUT_DIR, MAX_JOBS_PER_SEARCH, ENABLED_SOURCES,
     SCRAPE_CITIES, KEYWORDS,
 )
-from scrapers.linkedin_scraper import LinkedInScraper
 from scrapers.indeed_scraper import IndeedScraper
-from scrapers.glassdoor_scraper import GlassdoorScraper
+from scrapers.levelsfyi_scraper import LevelsFyiScraper
+from scrapers.payscale_scraper import PayScaleScraper
+from scrapers.ziprecruiter_scraper import ZipRecruiterScraper
 from scrapers.base_scraper import BaseScraper
 from utils.validators import validate_dataframe
 
@@ -46,9 +48,10 @@ logger = logging.getLogger(__name__)
 # Scraper registry
 # ──────────────────────────────────────────────
 SCRAPER_MAP = {
-    "linkedin": LinkedInScraper,
     "indeed": IndeedScraper,
-    "glassdoor": GlassdoorScraper,
+    "levelsfyi": LevelsFyiScraper,
+    "payscale": PayScaleScraper,
+    "ziprecruiter": ZipRecruiterScraper,
 }
 
 # ──────────────────────────────────────────────
@@ -179,6 +182,16 @@ def run_pipeline(
         logger.info("📁 Saved %d jobs → %s", len(df), csv_path)
         logger.info("📁 Saved %d jobs → %s", len(df), json_path)
 
+        # Insert into database
+        try:
+            from dotenv import load_dotenv
+            load_dotenv()
+            from api.db.loader import save_jobs_to_db
+            db_count = save_jobs_to_db(all_jobs)
+            logger.info("🗄️  Inserted %d new jobs into database", db_count)
+        except Exception as e:
+            logger.warning("⚠️  Database insert failed (CSV backup available): %s", e)
+
         return all_jobs, [csv_path, json_path]
 
     logger.warning("No jobs collected!")
@@ -253,16 +266,16 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-    python main.py --sources linkedin
-    python main.py --sources linkedin indeed --max-jobs 20
-    python main.py --sources linkedin indeed glassdoor --max-jobs 50
+    python main.py --sources indeed levelsfyi payscale ziprecruiter
+    python main.py --sources levelsfyi --max-jobs 20
+    python main.py --sources indeed payscale --max-jobs 50
         """,
     )
     parser.add_argument(
         "--sources",
         nargs="+",
         default=ENABLED_SOURCES,
-        choices=["linkedin", "indeed", "glassdoor"],
+        choices=["indeed", "levelsfyi", "payscale", "ziprecruiter"],
         help="Sources to scrape (default: all enabled)",
     )
     parser.add_argument(

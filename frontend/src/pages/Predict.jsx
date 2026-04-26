@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { DollarSign, TrendingUp, Award, ArrowRight, Loader2 } from 'lucide-react';
-import { predictSalary } from '../api/client';
+import { DollarSign, TrendingUp, Award, ArrowRight, Loader2, UploadCloud } from 'lucide-react';
+import { predictSalary, predictFromResume } from '../api/client';
 
 const CITIES = [
   'New York, NY, USA', 'San Francisco, CA, USA', 'Seattle, WA, USA',
@@ -42,7 +42,9 @@ export default function Predict() {
   });
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
+  const fileInputRef = useRef(null);
 
   const updateForm = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
 
@@ -56,7 +58,7 @@ export default function Predict() {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (!form.job_title.trim()) return;
 
     setLoading(true);
@@ -77,47 +79,114 @@ export default function Predict() {
     }
   };
 
-  return (
-    <div className="max-w-5xl mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
-        <DollarSign className="text-brand-400" size={28} /> Salary Predictor
-      </h1>
-      <p className="text-slate-400 mb-8">Enter your job details to get an AI-powered salary prediction</p>
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.type !== 'application/pdf') {
+      setError('Please upload a PDF resume.');
+      return;
+    }
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+    setUploading(true);
+    setError(null);
+    
+    try {
+      const { extracted_data } = await predictFromResume(file);
+      
+      // Update form state with extracted values
+      setForm(prev => {
+        const newForm = { ...prev, ...extracted_data };
+        
+        // Ensure skills are proper array
+        if (extracted_data.skills && Array.isArray(extracted_data.skills)) {
+          // Keep only skills that match our preset list to avoid random text
+          const matchedSkills = extracted_data.skills.filter(s => 
+            SKILLS.some(preset => preset.toLowerCase() === s.toLowerCase())
+          ).map(s => SKILLS.find(preset => preset.toLowerCase() === s.toLowerCase()));
+          
+          newForm.skills = matchedSkills;
+        }
+        
+        return newForm;
+      });
+      
+    } catch (err) {
+      setError(err.message || 'Failed to parse resume.');
+    } finally {
+      setUploading(false);
+      // Reset input so same file can be selected again
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  return (
+    <div className="max-w-6xl mx-auto px-4 py-12">
+      <h1 className="display-text text-5xl md:text-7xl mb-4 flex items-center gap-4">
+        <DollarSign className="text-brand-500" size={48} strokeWidth={3} /> SALARY PREDICTOR
+      </h1>
+      <p className="text-xl font-bold uppercase tracking-widest text-slate-400 mb-8 border-l-4 border-brand-500 pl-4">
+        AI-powered salary prediction based on real market data.
+      </p>
+
+      {/* Resume Upload CTA */}
+      <div className="mb-12 border-4 border-brand-500 bg-brand-500/10 p-6 flex flex-col md:flex-row items-center justify-between gap-6 shadow-brutal">
+        <div>
+          <h2 className="display-text text-3xl text-brand-500 mb-2">AUTO-FILL WITH RESUME</h2>
+          <p className="font-bold text-white uppercase tracking-wider text-sm">
+            Upload your PDF resume to instantly extract your skills, experience, and role using Nemotron 3 AI.
+          </p>
+        </div>
+        <input 
+          type="file" 
+          accept="application/pdf" 
+          className="hidden" 
+          ref={fileInputRef} 
+          onChange={handleFileUpload}
+        />
+        <button 
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+          className="brutal-btn whitespace-nowrap disabled:opacity-50"
+        >
+          {uploading ? <Loader2 className="animate-spin" size={20} /> : <UploadCloud size={20} />} 
+          {uploading ? 'PARSING...' : 'UPLOAD RESUME (PDF)'}
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
         {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-6">
           {/* Job Title */}
           <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Job Title *</label>
+            <label className="block text-sm font-bold text-white uppercase tracking-wider mb-2">Job Title *</label>
             <input
               type="text"
               value={form.job_title}
               onChange={e => updateForm('job_title', e.target.value)}
-              placeholder="e.g. Senior Data Scientist"
+              placeholder="E.G. SENIOR DATA SCIENTIST"
               required
-              className="w-full bg-surface-800 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none"
+              className="w-full bg-black border-2 border-white px-4 py-4 text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none uppercase font-bold tracking-wider"
             />
           </div>
 
           {/* City + Seniority */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">City *</label>
+              <label className="block text-sm font-bold text-white uppercase tracking-wider mb-2">City *</label>
               <select
                 value={form.city}
                 onChange={e => updateForm('city', e.target.value)}
-                className="w-full bg-surface-800 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-brand-500 outline-none"
+                className="w-full bg-black border-2 border-white px-4 py-4 text-white focus:border-brand-500 outline-none uppercase font-bold tracking-wider appearance-none"
               >
                 {CITIES.map(c => <option key={c} value={c}>{c.split(',')[0]}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Seniority *</label>
+              <label className="block text-sm font-bold text-white uppercase tracking-wider mb-2">Seniority *</label>
               <select
                 value={form.seniority_level}
                 onChange={e => updateForm('seniority_level', e.target.value)}
-                className="w-full bg-surface-800 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-brand-500 outline-none"
+                className="w-full bg-black border-2 border-white px-4 py-4 text-white focus:border-brand-500 outline-none uppercase font-bold tracking-wider appearance-none"
               >
                 {SENIORITY.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
@@ -125,24 +194,24 @@ export default function Predict() {
           </div>
 
           {/* Experience + Employment + Remote */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Experience (yrs)</label>
+              <label className="block text-sm font-bold text-white uppercase tracking-wider mb-2">Exp (yrs)</label>
               <input
                 type="number"
                 min="0" max="30"
                 value={form.experience_years || ''}
                 onChange={e => updateForm('experience_years', e.target.value)}
                 placeholder="0-30"
-                className="w-full bg-surface-800 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-brand-500 outline-none"
+                className="w-full bg-black border-2 border-white px-4 py-4 text-white placeholder-slate-500 focus:border-brand-500 outline-none font-bold"
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Employment</label>
+              <label className="block text-sm font-bold text-white uppercase tracking-wider mb-2">Type</label>
               <select
                 value={form.employment_type}
                 onChange={e => updateForm('employment_type', e.target.value)}
-                className="w-full bg-surface-800 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-brand-500 outline-none"
+                className="w-full bg-black border-2 border-white px-4 py-4 text-white focus:border-brand-500 outline-none uppercase font-bold appearance-none"
               >
                 <option>Full-time</option>
                 <option>Part-time</option>
@@ -151,11 +220,11 @@ export default function Predict() {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Work Type</label>
+              <label className="block text-sm font-bold text-white uppercase tracking-wider mb-2">Work</label>
               <select
                 value={form.remote_type}
                 onChange={e => updateForm('remote_type', e.target.value)}
-                className="w-full bg-surface-800 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-brand-500 outline-none"
+                className="w-full bg-black border-2 border-white px-4 py-4 text-white focus:border-brand-500 outline-none uppercase font-bold appearance-none"
               >
                 <option>On-site</option>
                 <option>Remote</option>
@@ -165,13 +234,13 @@ export default function Predict() {
           </div>
 
           {/* Education + Company */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Education</label>
+              <label className="block text-sm font-bold text-white uppercase tracking-wider mb-2">Education</label>
               <select
                 value={form.education_required}
                 onChange={e => updateForm('education_required', e.target.value)}
-                className="w-full bg-surface-800 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-brand-500 outline-none"
+                className="w-full bg-black border-2 border-white px-4 py-4 text-white focus:border-brand-500 outline-none uppercase font-bold appearance-none"
               >
                 <option value="">Not specified</option>
                 <option>Bachelor's</option>
@@ -180,13 +249,13 @@ export default function Predict() {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Company</label>
+              <label className="block text-sm font-bold text-white uppercase tracking-wider mb-2">Company</label>
               <input
                 type="text"
                 value={form.company_name}
                 onChange={e => updateForm('company_name', e.target.value)}
-                placeholder="e.g. Google"
-                className="w-full bg-surface-800 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-brand-500 outline-none"
+                placeholder="E.G. GOOGLE"
+                className="w-full bg-black border-2 border-white px-4 py-4 text-white placeholder-slate-500 focus:border-brand-500 outline-none uppercase font-bold tracking-wider"
               />
             </div>
           </div>
@@ -194,17 +263,17 @@ export default function Predict() {
           {/* Toggles */}
           <div className="flex gap-4">
             {[
-              { key: 'has_equity', label: '💰 Has Equity' },
-              { key: 'has_bonus', label: '🎯 Has Bonus' },
+              { key: 'has_equity', label: '💰 EQUITY' },
+              { key: 'has_bonus', label: '🎯 BONUS' },
             ].map(({ key, label }) => (
               <button
                 key={key}
                 type="button"
                 onClick={() => updateForm(key, !form[key])}
-                className={`flex-1 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+                className={`flex-1 px-4 py-4 border-2 font-bold uppercase tracking-widest transition-all ${
                   form[key]
-                    ? 'bg-brand-500/20 text-brand-300 border border-brand-500/30'
-                    : 'bg-white/5 text-slate-400 border border-white/10 hover:bg-white/10'
+                    ? 'bg-brand-500 text-black border-brand-500 shadow-brutal'
+                    : 'bg-black text-white border-white hover:bg-surface-800'
                 }`}
               >
                 {label}
@@ -214,19 +283,19 @@ export default function Predict() {
 
           {/* Skills */}
           <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-              Skills ({form.skills.length} selected)
+            <label className="block text-sm font-bold text-white uppercase tracking-wider mb-2">
+              Skills ({form.skills.length})
             </label>
-            <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto p-3 bg-surface-900 rounded-xl border border-white/5">
+            <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto p-4 bg-black border-2 border-white">
               {SKILLS.map(skill => (
                 <button
                   key={skill}
                   type="button"
                   onClick={() => toggleSkill(skill)}
-                  className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all ${
+                  className={`px-3 py-1 font-bold uppercase text-xs border-2 transition-all ${
                     form.skills.includes(skill)
-                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
-                      : 'bg-white/5 text-slate-500 hover:text-slate-300 border border-transparent hover:bg-white/10'
+                      ? 'bg-white text-black border-white'
+                      : 'bg-black text-slate-500 border-slate-500 hover:text-white hover:border-white'
                   }`}
                 >
                   {skill}
@@ -239,34 +308,34 @@ export default function Predict() {
           <button
             type="submit"
             disabled={loading || !form.job_title.trim()}
-            className="w-full py-4 rounded-xl bg-gradient-to-r from-brand-600 to-violet-600 text-white font-bold text-base hover:from-brand-500 hover:to-violet-500 transition-all shadow-lg shadow-brand-500/25 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="brutal-btn w-full text-lg mt-4 disabled:opacity-50 disabled:shadow-none"
           >
-            {loading ? <><Loader2 size={18} className="animate-spin" /> Predicting...</> : 'Predict Salary'}
+            {loading ? <><Loader2 size={20} className="animate-spin" /> PREDICTING...</> : 'PREDICT SALARY'}
           </button>
 
-          {error && <p className="text-red-400 text-sm text-center">{error}</p>}
+          {error && <p className="text-brand-accent font-bold mt-2 uppercase">{error}</p>}
         </form>
 
         {/* Result */}
         <div>
           {result ? (
-            <div className="space-y-4 sticky top-24">
+            <div className="space-y-6 sticky top-28">
               {/* Main prediction */}
-              <div className="glass rounded-xl p-6 border border-brand-500/20">
-                <p className="text-slate-400 text-sm mb-2">Predicted Salary</p>
-                <p className="text-5xl font-extrabold gradient-text mb-1">
+              <div className="brutal-card p-8">
+                <p className="text-slate-400 font-bold uppercase tracking-widest mb-4">PREDICTED SALARY</p>
+                <p className="display-text text-7xl md:text-8xl text-brand-500 mb-2 leading-none">
                   ${result.predicted_salary_usd?.toLocaleString()}
                 </p>
-                <p className="text-slate-500">USD / year</p>
+                <p className="font-bold text-white uppercase tracking-widest">USD / YEAR</p>
 
                 {/* Confidence bar */}
-                <div className="mt-6">
-                  <div className="flex justify-between text-xs text-slate-500 mb-2">
+                <div className="mt-8">
+                  <div className="flex justify-between font-bold text-sm uppercase text-slate-400 mb-2">
                     <span>${result.confidence_low?.toLocaleString()}</span>
-                    <span className="text-slate-400">Confidence Range</span>
+                    <span className="text-white">RANGE</span>
                     <span>${result.confidence_high?.toLocaleString()}</span>
                   </div>
-                  <div className="confidence-bar h-3">
+                  <div className="confidence-bar">
                     <div
                       className="confidence-marker"
                       style={{
@@ -279,60 +348,35 @@ export default function Predict() {
               </div>
 
               {/* Percentile */}
-              <div className="glass rounded-xl p-5 flex items-center gap-4">
-                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-brand-500 to-violet-600 flex items-center justify-center shrink-0">
-                  <span className="text-white font-bold text-lg">{result.percentile}</span>
+              <div className="brutal-card p-6 flex items-center gap-6">
+                <div className="w-16 h-16 bg-white border-2 border-black shadow-brutal-pink flex items-center justify-center shrink-0">
+                  <span className="text-black font-bold display-text text-3xl">{result.percentile}</span>
                 </div>
                 <div>
-                  <p className="text-white font-semibold">Top {100 - (result.percentile || 50)}%</p>
-                  <p className="text-slate-400 text-sm">for this role and city</p>
+                  <p className="text-brand-500 font-bold uppercase tracking-widest text-lg">TOP {100 - (result.percentile || 50)}%</p>
+                  <p className="text-slate-400 font-bold uppercase">FOR THIS ROLE & CITY</p>
                 </div>
-                <Award className="ml-auto text-amber-400" size={24} />
+                <Award className="ml-auto text-brand-accent" size={32} />
               </div>
 
-              {/* Top features */}
-              {result.top_features?.length > 0 && (
-                <div className="glass rounded-xl p-5">
-                  <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
-                    <TrendingUp size={16} className="text-brand-400" /> Top Impact Factors
-                  </h3>
-                  <div className="space-y-2">
-                    {result.top_features.map((f, i) => (
-                      <div key={i} className="flex items-center justify-between py-2 border-b border-white/5 last:border-0">
-                        <div>
-                          <p className="text-sm text-white">{f.feature?.replace(/_/g, ' ')}</p>
-                          <p className="text-xs text-slate-500">value: {f.value}</p>
-                        </div>
-                        <span className={`text-sm font-bold ${
-                          String(f.impact).startsWith('+') ? 'text-emerald-400' : 'text-red-400'
-                        }`}>
-                          {f.impact}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               {/* Model info */}
-              <div className="flex items-center justify-between text-xs text-slate-500 px-1">
-                <span>Model: {result.model_name}</span>
-                <span>Similar jobs: {result.similar_jobs_count}</span>
+              <div className="flex items-center justify-between font-bold text-xs uppercase text-slate-500 border-t-2 border-white/20 pt-4">
+                <span>MODEL: {result.model_name} v{result.model_version}</span>
               </div>
 
               {/* Browse similar */}
               <button
                 onClick={() => navigate(`/jobs?keyword=${encodeURIComponent(form.job_title)}&city=${encodeURIComponent(form.city)}`)}
-                className="w-full py-3 rounded-xl glass text-brand-300 font-medium text-sm hover:bg-brand-500/10 transition-all flex items-center justify-center gap-2"
+                className="w-full py-4 border-2 border-white bg-black hover:bg-white hover:text-black transition-colors font-bold uppercase tracking-widest flex items-center justify-center gap-3 mt-4"
               >
-                Browse similar jobs <ArrowRight size={16} />
+                BROWSE SIMILAR JOBS <ArrowRight size={20} strokeWidth={3} />
               </button>
             </div>
           ) : (
-            <div className="glass rounded-xl p-10 text-center sticky top-24">
-              <DollarSign size={48} className="text-slate-600 mx-auto mb-4" />
-              <p className="text-slate-400 text-lg font-medium">Your prediction will appear here</p>
-              <p className="text-slate-500 text-sm mt-2">Fill in the form and click "Predict Salary"</p>
+            <div className="border-4 border-white border-dashed p-12 text-center sticky top-28 h-96 flex flex-col items-center justify-center bg-black/50">
+              <DollarSign size={64} className="text-white mb-6" strokeWidth={1} />
+              <p className="display-text text-3xl text-slate-300">AWAITING INPUT</p>
+              <p className="font-bold text-slate-500 uppercase tracking-widest mt-4">FILL OUT THE FORM TO SEE PREDICTIONS</p>
             </div>
           )}
         </div>

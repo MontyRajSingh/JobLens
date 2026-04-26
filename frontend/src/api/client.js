@@ -9,7 +9,9 @@ const client = axios.create({
 
 // Request interceptor
 client.interceptors.request.use((config) => {
-  config.headers['Content-Type'] = 'application/json';
+  if (!(config.data instanceof FormData)) {
+    config.headers['Content-Type'] = 'application/json';
+  }
   return config;
 });
 
@@ -35,6 +37,13 @@ client.interceptors.response.use(
 // ── Prediction ──
 export const predictSalary = (payload) =>
   client.post('/api/v1/predict', payload);
+
+export const predictFromResume = (file) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  // Do not set Content-Type manually, let Axios set it with the boundary automatically
+  return client.post('/api/v1/predict/resume', formData);
+};
 
 // ── Jobs ──
 export const searchJobs = (params) =>

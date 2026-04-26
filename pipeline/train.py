@@ -2,7 +2,7 @@
 train.py — Training entry point for the JobLens salary prediction model.
 
 Orchestrates the full training pipeline:
-1. Load CSV → DataCleaner().clean(df)
+1. Load data from CSV, Kaggle dataset, or PostgreSQL database
 2. Check minimum salary rows
 3. FeatureEngineer().fit_transform() → feature matrix
 4. SalaryPredictor().train(X, y)
@@ -14,6 +14,7 @@ CLI:
     python -m pipeline.train --data output/jobs_master.csv --min-rows 100
     python -m pipeline.train --use-kaggle
     python -m pipeline.train --use-kaggle --merge-scraped
+    python -m pipeline.train --use-db
 """
 
 import os
@@ -54,7 +55,23 @@ def load_data(args) -> pd.DataFrame:
     """
     frames = []
 
-    if args.use_kaggle:
+    if args.use_db:
+        # Load from PostgreSQL database
+        from dotenv import load_dotenv
+        load_dotenv()
+        from api.db.loader import load_training_data
+        df = load_training_data()
+        if df.empty:
+            logger.error("Database returned no data.")
+            print("\n❌ No data in the database.")
+            print("   Run the scraper first: python main.py --sources linkedin --max-jobs 30")
+            print("   Or use --data to load from a CSV file.")
+            sys.exit(1)
+        logger.info("Loaded %d rows from database", len(df))
+        print(f"   Database rows: {len(df):,}")
+        return df
+
+    elif args.use_kaggle:
         from pipeline.dataset_loader import KaggleDatasetLoader
         kaggle_path = DEFAULT_KAGGLE_PATH
         if not os.path.exists(kaggle_path):
@@ -116,7 +133,7 @@ def train_pipeline(args) -> None:
     model_dir = args.model_dir
     min_rows = args.min_rows
 
-    source = "Kaggle dataset" if args.use_kaggle else args.data
+    source = "PostgreSQL database" if args.use_db else ("Kaggle dataset" if args.use_kaggle else args.data)
     print(f"\n{'='*70}")
     print(f" 🚀 JOBLENS TRAINING PIPELINE")
     print(f"{'='*70}")
@@ -212,6 +229,7 @@ def main():
         epilog="""
 Examples:
   python -m pipeline.train --use-kaggle
+  python -m pipeline.train --use-db
   python -m pipeline.train --data output/jobs_master.csv --min-rows 100
   python -m pipeline.train --use-kaggle --merge-scraped
         """,
@@ -233,6 +251,11 @@ Examples:
         help="Combine Kaggle + scraped data (requires --use-kaggle)",
     )
     parser.add_argument(
+        "--use-db",
+        action="store_true",
+        help="Load training data from PostgreSQL database instead of CSV",
+    )
+    parser.add_argument(
         "--model-dir",
         type=str,
         default=DEFAULT_MODEL_DIR,
@@ -248,6 +271,8 @@ Examples:
 
     if args.merge_scraped and not args.use_kaggle:
         parser.error("--merge-scraped requires --use-kaggle")
+    if args.use_db and args.use_kaggle:
+        parser.error("--use-db and --use-kaggle are mutually exclusive")
 
     train_pipeline(args)
 
