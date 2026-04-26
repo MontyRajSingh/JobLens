@@ -11,7 +11,7 @@ and get_engine() for use by the scraper and training pipelines.
 import os
 import logging
 
-from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, Float, Text, DateTime
+from sqlalchemy import create_engine, MetaData, Table, Column, Integer, BigInteger, String, Float, Text, DateTime
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from datetime import datetime
@@ -32,17 +32,18 @@ if DATABASE_URL:
     logger.info("Using PostgreSQL: %s", DATABASE_URL.split("@")[-1] if "@" in DATABASE_URL else "configured")
 else:
     # Development fallback (SQLite)
-    DB_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data")
+    # Using absolute path to ensure API and Scraper share the same file
+    ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    DB_DIR = os.path.join(ROOT_DIR, "data")
     os.makedirs(DB_DIR, exist_ok=True)
     DB_PATH = os.path.join(DB_DIR, "jobs.db")
     DATABASE_URL = f"sqlite:///{DB_PATH}"
     engine = create_engine(
         DATABASE_URL,
         connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
         echo=False,
     )
-    logger.info("Using SQLite: %s", DB_PATH)
+    logger.info("Connected to database at: %s", DB_PATH)
 
 # ──────────────────────────────────────────────
 # Session factory
@@ -57,35 +58,35 @@ metadata = MetaData()
 jobs_table = Table(
     "jobs",
     metadata,
-    Column("id", Integer, primary_key=True, autoincrement=True),
-    Column("job_title", String(500)),
-    Column("company_name", String(300)),
-    Column("company_name_raw", String(300)),
-    Column("city", String(200)),
-    Column("location", String(300)),
-    Column("salary", String(200)),
-    Column("salary_currency", String(10)),
+    Column("id", BigInteger, primary_key=True, autoincrement=True),
+    Column("job_title", Text),
+    Column("company_name", Text),
+    Column("company_name_raw", Text),
+    Column("city", Text),
+    Column("location", Text),
+    Column("salary", Text),
+    Column("salary_currency", Text),
     Column("salary_usd_numeric", Float),
-    Column("seniority_level", String(100)),
-    Column("experience_required", String(100)),
-    Column("employment_type", String(50)),
-    Column("remote_type", String(50)),
-    Column("industry", String(200)),
-    Column("education_required", String(100)),
-    Column("has_equity", Integer),
-    Column("has_bonus", Integer),
-    Column("has_remote_benefits", Integer),
+    Column("seniority_level", Text),
+    Column("experience_required", Text),
+    Column("employment_type", Text),
+    Column("remote_type", Text),
+    Column("industry", Text),
+    Column("education_required", Text),
+    Column("has_equity", Float),
+    Column("has_bonus", Float),
+    Column("has_remote_benefits", Float),
     Column("skills_required", Text),
     Column("job_description", Text),
-    Column("job_link", String(1000)),
-    Column("job_id", String(100)),
-    Column("source_website", String(50)),
-    Column("dedup_key", String(20), unique=True, index=True),
-    Column("is_faang", Integer),
-    Column("cost_of_living_index", Integer),
-    Column("date_posted_raw", String(100)),
-    Column("applicant_count", Integer),
-    Column("currency", String(10)),
+    Column("job_link", Text),
+    Column("job_id", Text),
+    Column("source_website", Text),
+    Column("dedup_key", Text, unique=True, index=True),
+    Column("is_faang", Float),
+    Column("cost_of_living_index", Float),
+    Column("date_posted_raw", Text),
+    Column("applicant_count", Float),
+    Column("currency", Text),
     Column("scraped_at", DateTime, default=datetime.utcnow),
 )
 

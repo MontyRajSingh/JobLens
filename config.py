@@ -15,7 +15,7 @@ load_dotenv()
 # Output & limits
 # ──────────────────────────────────────────────
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
-MAX_JOBS_PER_SEARCH = 30
+MAX_JOBS_PER_SEARCH = 100
 ENABLED_SOURCES = ["indeed", "levelsfyi", "payscale", "ziprecruiter"]
 
 # ──────────────────────────────────────────────
@@ -40,7 +40,26 @@ SCRAPE_CITIES = [
 # ──────────────────────────────────────────────
 # Job search keywords
 # ──────────────────────────────────────────────
-KEYWORDS = ["data scientist", "machine learning engineer", "software engineer"]
+KEYWORDS = [
+    "data scientist", 
+    "machine learning engineer", 
+    "software engineer",
+    "data analyst",
+    "data engineer",
+    "ui/ux designer",
+    "graphic designer",
+    "full stack developer",
+    "backend engineer",
+    "frontend engineer",
+    "devops engineer",
+    "cloud architect",
+    "product manager",
+    "cyber security engineer",
+    "mobile app developer",
+    "qa engineer",
+    "system administrator",
+    "ai research scientist"
+]
 
 # ──────────────────────────────────────────────
 # Chrome / Selenium options
@@ -69,6 +88,11 @@ SKILL_LIST = [
     "Tableau", "Power BI", "Excel", "Spark", "Hadoop", "Kafka", "Airflow",
     "Data Science", "Data Analysis", "Data Engineering", "MLOps",
     "ML", "AI", "AI/ML", "REST", "API", "CI/CD", "DevOps", "Security",
+    "Figma", "Adobe XD", "Photoshop", "Illustrator", "Sketch", "InVision",
+    "Product Management", "Agile", "Scrum", "Jira", "Confluence",
+    "Selenium", "Cypress", "Appium", "JMeter", "Postman",
+    "Cyber Security", "Penetration Testing", "Firewall", "SIEM",
+    "Cloud Computing", "Infrastructure as Code", "Linux", "Unix"
 ]
 
 # ──────────────────────────────────────────────

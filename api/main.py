@@ -99,20 +99,21 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("⚠️  No model found at %s — prediction endpoint will return 503", model_path)
 
-    # Load jobs into DB
-    csv_path = os.path.join(DATA_DIR, "jobs_cleaned.csv")
-    if not os.path.exists(csv_path):
-        csv_path = os.path.join(DATA_DIR, "jobs_master.csv")
-
-    if os.path.exists(csv_path):
+    # Get ACTUAL count from DB (Skip heavy CSV loading on every startup)
+    from api.db.database import SessionLocal, init_db, engine
+    from sqlalchemy import text
+    
+    logger.info("📡 API connecting to: %s", engine.url)
+    init_db()
+    with SessionLocal() as db:
         try:
-            count = load_jobs_to_db(csv_path)
-            _app_state["jobs_count"] = count
-            logger.info("✅ Loaded %d jobs into database", count)
+            result = db.execute(text("SELECT COUNT(*) FROM jobs"))
+            actual_count = result.scalar() or 0
+            _app_state["jobs_count"] = actual_count
+            logger.info("📊 Total jobs available in DB: %d", actual_count)
         except Exception as e:
-            logger.warning("⚠️  DB load failed: %s", e)
-    else:
-        logger.warning("⚠️  No jobs CSV found — job endpoints will return empty results")
+            logger.warning("⚠️  Could not count jobs: %s", e)
+            _app_state["jobs_count"] = 0
 
     logger.info("🚀 JobLens API ready at http://localhost:8000")
     logger.info("📖 Docs: http://localhost:8000/docs")
