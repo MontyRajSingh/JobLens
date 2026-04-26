@@ -5,7 +5,8 @@ data/*.csv
 venv/
 
 # Scraped output
-output/
+output/*
+!output/jobs_master.csv
 
 # Docker
 .docker/
