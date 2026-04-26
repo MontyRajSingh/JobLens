@@ -1,6 +1,13 @@
 {
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "https://joblens-api.onrender.com/api/$1" },
-    { "source": "/(.*)", "destination": "/frontend/$1" }
+  "builds": [
+    {
+      "src": "frontend/package.json",
+      "use": "@vercel/static-build"
+    }
+  ],
+  "routes": [
+    { "src": "/api/(.*)", "dest": "https://joblens-api.onrender.com/api/$1" },
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/frontend/$1" }
   ]
 }
