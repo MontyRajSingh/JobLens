@@ -72,11 +72,19 @@ SKILL_LIST = [
 ]
 
 # ──────────────────────────────────────────────
-# FAANG-tier companies
+# Company Tiers (Tier 1: Big Tech/AI, Tier 2: Consulting/Service, Tier 3: Others)
 # ──────────────────────────────────────────────
-FAANG = {
-    "google", "meta", "apple", "amazon", "microsoft", "netflix",
-    "openai", "anthropic", "deepmind", "nvidia",
+COMPANY_TIERS = {
+    "tier_1": {
+        "google", "meta", "apple", "amazon", "microsoft", "netflix", 
+        "openai", "anthropic", "deepmind", "nvidia", "tesla", "uber", 
+        "airbnb", "stripe", "palantir", "doordash", "snowflakes"
+    },
+    "tier_2": {
+        "deloitte", "accenture", "infosys", "tcs", "wipro", "hcl", 
+        "cognizant", "ibm", "oracle", "sap", "salesforce", "adobe", 
+        "intel", "cisco", "jpmorgan", "goldman sachs", "morgan stanley"
+    }
 }
 
 # ──────────────────────────────────────────────

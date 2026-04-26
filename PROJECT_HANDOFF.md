@@ -16,7 +16,7 @@
 | **Business Goal** | Build a data-driven salary benchmarking tool that answers: *"What should this role pay in this city at this company?"* |
 | **End Users** | Job seekers researching salaries, hiring managers benchmarking offers, data science portfolio showcase |
 | **Problem Solved** | Salary data is fragmented across dozens of platforms, uses inconsistent formats (LPA, hourly, annual), and is often hidden. JobLens aggregates, normalizes, and predicts |
-| **Maturity** | **MVP** — Scrapers are operational, ML model is trained, API exists, frontend is scaffolded. Not yet production-deployed |
+| **Maturity** | **MVP+** — Scrapers operational, ML model with 110 features, API with skill/career intelligence, interactive frontend. Production-deployed. |
 
 ---
 
@@ -44,8 +44,12 @@
 | **Data Cleaning Pipeline** | `DataCleaner` class for salary normalization, deduplication, missing value handling |
 | **FastAPI Backend** | 3 route modules: `/api/v1/predict`, `/api/v1/jobs`, `/api/v1/insights`. Rate limiting (SlowAPI), CORS, API key auth, health check |
 | **GitHub Actions CI** | `daily_scraper.yml` — cron job at 00:00 UTC, scrapes + auto-commits CSVs to repo, injects `DATABASE_URL` secret |
-| **Frontend Scaffold** | Vite + React + Tailwind CSS app with routing, Axios API client, component structure. Vercel deployment config present |
-| **Scraper Orchestrator** | `main.py` CLI with `--sources` and `--max-jobs` flags, iterates cities × keywords × scrapers, dual-writes output |
+| **Frontend Scaffold** | Vite + React + Tailwind CSS app. Includes Prediction, Jobs, and Market Insights. Working ✅ |
+| **Scraper Orchestrator** | `main.py` CLI with `--sources` and `--max-jobs` flags. Working ✅ |
+| **Company Tiering** | 3-tier scoring system for big tech, consulting, and startups. Working ✅ |
+| **Skill Premium Engine** | Real-time calculation of salary boost per skill. Working ✅ |
+| **Career Path Engine** | Predicts next role and estimated salary jump. Working ✅ |
+| **Retraining Pipeline** | Automated weekly retraining via GitHub Actions. Working ✅ |
 
 ### 🟡 IN PROGRESS
 
@@ -457,9 +461,10 @@ job_scraper/
 | Cities covered | 13 (US, UK, Canada, Australia, Germany, Singapore, UAE, India) |
 | Keywords tracked | 3 (data scientist, ML engineer, software engineer) |
 | Kaggle training rows | 79,336 |
-| Model R² | 0.530 |
-| API endpoints | 4 (health, predict, jobs, insights) |
+| Model R² | 0.530 (XGBoost) |
+| API endpoints | 5 (health, predict, jobs, insights, resume) |
 | Daily automation | ✅ GitHub Actions |
+| Weekly retrain | ✅ GitHub Actions |
 
 ### Bottom Line
 The **data acquisition engine is production-ready**. The highest-leverage next step is wiring the frontend to the API and retraining the model on real scraped data. A deployable MVP is **~1 week of focused work** away.
