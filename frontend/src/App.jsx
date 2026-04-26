@@ -5,14 +5,12 @@ import Jobs from './pages/Jobs';
 import JobDetail from './pages/JobDetail';
 import Predict from './pages/Predict';
 import Insights from './pages/Insights';
-import ParallaxStarsBackground from './components/ParallaxStarsBackground';
 
 export default function App() {
   return (
-    <div className="min-h-screen bg-transparent relative">
-      <ParallaxStarsBackground speed={1.5} />
+    <div className="min-h-screen bg-surface-950">
       <Navbar />
-      <main className="relative z-10">
+      <main>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/jobs" element={<Jobs />} />

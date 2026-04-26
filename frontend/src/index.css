@@ -10,55 +10,38 @@
 }
 
 body {
-  font-family: 'IBM Plex Mono', monospace;
-  background-color: #000000;
-  color: #FFFFFF;
+  font-family: 'Inter', system-ui, sans-serif;
+  background: #0f172a;
+  color: #e2e8f0;
   min-height: 100vh;
-  position: relative;
-  /* Noise pattern */
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.08'/%3E%3C/svg%3E");
 }
 
 /* ── Scrollbar ── */
-::-webkit-scrollbar { width: 8px; }
-::-webkit-scrollbar-track { background: #000; border-left: 1px solid #333; }
-::-webkit-scrollbar-thumb { background: #D4FF00; }
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #1e293b; }
+::-webkit-scrollbar-thumb { background: #4f46e5; border-radius: 3px; }
 
-/* ── Brutalist Components ── */
+/* ── Glass Card ── */
 .glass {
-  @apply bg-surface-900 border-2 border-white shadow-brutal-white transition-transform;
-}
-.glass:hover {
-  @apply -translate-y-1 -translate-x-1 shadow-[6px_6px_0px_0px_rgba(255,255,255,1)];
-}
-
-.brutal-card {
-  @apply bg-transparent backdrop-blur-sm border-2 border-white shadow-brutal-white transition-transform hover:-translate-y-1 hover:-translate-x-1 hover:shadow-[6px_6px_0px_0px_rgba(255,255,255,1)];
+  background: rgba(30, 41, 59, 0.7);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(99, 102, 241, 0.15);
 }
 
-.brutal-card-brand {
-  @apply bg-transparent backdrop-blur-sm border-2 border-brand-500 shadow-brutal transition-transform hover:-translate-y-1 hover:-translate-x-1 hover:shadow-[6px_6px_0px_0px_rgba(212,255,0,1)];
-}
-
-.brutal-btn {
-  @apply inline-flex items-center justify-center gap-2 px-8 py-4 bg-brand-500 text-black font-bold uppercase tracking-widest border-2 border-brand-500 shadow-brutal-white transition-all hover:-translate-y-1 hover:-translate-x-1 hover:shadow-[8px_8px_0px_0px_rgba(255,255,255,1)] active:translate-y-0 active:translate-x-0 active:shadow-none;
-}
-
-/* ── Typography ── */
-.display-text {
-  font-family: 'Oswald', sans-serif;
-  text-transform: uppercase;
-}
+/* ── Gradient Text ── */
 .gradient-text {
-  color: #D4FF00; /* Replaced gradient with solid brand accent for brutalist feel */
+  background: linear-gradient(135deg, #818cf8, #6366f1, #a78bfa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 /* ── Skeleton Loading ── */
 .skeleton {
-  background: linear-gradient(90deg, #111 25%, #333 50%, #111 75%);
+  background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
-  border: 1px solid #333;
+  border-radius: 8px;
 }
 
 @keyframes shimmer {
@@ -66,44 +49,41 @@ body {
   100% { background-position: -200% 0; }
 }
 
-/* ── Pulse glow (repurposed for brutal flash) ── */
+/* ── Pulse glow ── */
 .glow-pulse {
-  animation: flash 2s step-end infinite;
+  animation: glowPulse 2s ease-in-out infinite alternate;
 }
-@keyframes flash {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.8; }
+
+@keyframes glowPulse {
+  from { box-shadow: 0 0 8px rgba(99, 102, 241, 0.3); }
+  to { box-shadow: 0 0 20px rgba(99, 102, 241, 0.6); }
 }
 
 /* ── Badge styles ── */
 .badge {
-  @apply px-3 py-1 border-2 text-xs font-bold uppercase tracking-wider bg-black;
+  @apply px-2.5 py-0.5 rounded-full text-xs font-semibold tracking-wide;
 }
 
-.badge-remote { @apply text-[#D4FF00] border-[#D4FF00]; }
-.badge-hybrid { @apply text-[#FF007F] border-[#FF007F]; }
-.badge-onsite { @apply text-white border-white; }
-.badge-source { @apply text-[#D4FF00] border-[#D4FF00]; }
-.badge-seniority { @apply text-white border-white; }
-.badge-skill { @apply bg-white text-black border-white; }
+.badge-remote { @apply bg-emerald-500/20 text-emerald-400 border border-emerald-500/30; }
+.badge-hybrid { @apply bg-amber-500/20 text-amber-400 border border-amber-500/30; }
+.badge-onsite { @apply bg-slate-500/20 text-slate-400 border border-slate-500/30; }
+.badge-source { @apply bg-brand-500/20 text-brand-300 border border-brand-500/30; }
+.badge-seniority { @apply bg-violet-500/20 text-violet-300 border border-violet-500/30; }
+.badge-skill { @apply bg-cyan-500/15 text-cyan-300 border border-cyan-500/20; }
 
 /* ── Chart tooltips ── */
 .recharts-tooltip-wrapper .recharts-default-tooltip {
-  background: #000 !important;
-  border: 2px solid #D4FF00 !important;
-  box-shadow: 4px 4px 0px 0px rgba(212, 255, 0, 1) !important;
-  color: #FFF !important;
-  border-radius: 0 !important;
-  text-transform: uppercase;
-  font-family: 'IBM Plex Mono', monospace !important;
+  background: #1e293b !important;
+  border: 1px solid rgba(99, 102, 241, 0.3) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4) !important;
 }
 
 /* ── Confidence bar ── */
 .confidence-bar {
-  background: #333;
-  border: 2px solid #FFF;
+  background: linear-gradient(90deg, #334155, #4f46e5, #334155);
+  border-radius: 999px;
   position: relative;
-  height: 24px;
 }
 
 .confidence-marker {
@@ -111,7 +91,9 @@ body {
   top: 50%;
   transform: translate(-50%, -50%);
   width: 16px;
-  height: 28px;
-  background: #D4FF00;
-  border: 2px solid #000;
+  height: 16px;
+  background: #818cf8;
+  border: 3px solid #e2e8f0;
+  border-radius: 50%;
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.6);
 }
