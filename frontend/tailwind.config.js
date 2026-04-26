@@ -8,28 +8,31 @@ export default {
     extend: {
       colors: {
         brand: {
-          400: '#E6FF55', // Electric Lime
-          500: '#D4FF00', 
-          600: '#BCE600',
-          accent: '#FF007F', // Hot Pink
+          50: '#eef2ff',
+          100: '#e0e7ff',
+          200: '#c7d2fe',
+          300: '#a5b4fc',
+          400: '#818cf8',
+          500: '#6366f1',
+          600: '#4f46e5',
+          700: '#4338ca',
+          800: '#3730a3',
+          900: '#312e81',
+          950: '#1e1b4b',
         },
         surface: {
-          800: '#1A1A1A',
-          900: '#0A0A0A',
-          950: '#000000',
+          50: '#f8fafc',
+          100: '#f1f5f9',
+          200: '#e2e8f0',
+          700: '#334155',
+          800: '#1e293b',
+          900: '#0f172a',
+          950: '#020617',
         }
       },
       fontFamily: {
-        display: ['Oswald', 'sans-serif'],
-        mono: ['"IBM Plex Mono"', 'monospace'],
-        sans: ['"IBM Plex Mono"', 'monospace'], // Mono default for terminal vibe
+        sans: ['Inter', 'system-ui', 'sans-serif'],
       },
-      boxShadow: {
-        'brutal': '4px 4px 0px 0px rgba(212, 255, 0, 1)',
-        'brutal-white': '4px 4px 0px 0px rgba(255, 255, 255, 1)',
-        'brutal-pink': '4px 4px 0px 0px rgba(255, 0, 127, 1)',
-        'brutal-lg': '8px 8px 0px 0px rgba(212, 255, 0, 1)',
-      }
     },
   },
   plugins: [],

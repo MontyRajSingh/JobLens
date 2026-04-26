@@ -14,32 +14,32 @@ export default function Navbar() {
   const location = useLocation();
 
   return (
-    <nav className="sticky top-0 z-50 bg-black border-b-4 border-white shadow-brutal-white">
+    <nav className="sticky top-0 z-50 glass border-b border-brand-500/10">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
-        <div className="flex items-center justify-between h-20">
+        <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link to="/" className="flex items-center gap-3 group">
-            <div className="w-10 h-10 bg-brand-500 border-2 border-white flex items-center justify-center shadow-brutal transition-transform group-hover:-translate-y-1 group-hover:-translate-x-1">
-              <Search size={22} className="text-black stroke-[3]" />
+          <Link to="/" className="flex items-center gap-2 group">
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center shadow-lg shadow-brand-500/20 group-hover:shadow-brand-500/40 transition-shadow">
+              <Search size={18} className="text-white" />
             </div>
-            <span className="text-2xl font-bold display-text tracking-widest text-white">JOBLENS</span>
+            <span className="text-xl font-bold gradient-text">JobLens</span>
           </Link>
 
           {/* Desktop links */}
-          <div className="hidden md:flex items-center gap-4">
+          <div className="hidden md:flex items-center gap-1">
             {NAV_LINKS.map(({ path, label, icon: Icon }) => {
               const active = location.pathname === path;
               return (
                 <Link
                   key={path}
                   to={path}
-                  className={`flex items-center gap-2 px-4 py-2 border-2 transition-all duration-200 uppercase font-bold tracking-wider text-sm
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200
                     ${active
-                      ? 'bg-brand-500 text-black border-brand-500 shadow-[4px_4px_0px_0px_rgba(255,255,255,1)]'
-                      : 'text-white border-transparent hover:border-white hover:bg-surface-800'
+                      ? 'bg-brand-500/20 text-brand-300 shadow-inner'
+                      : 'text-slate-400 hover:text-white hover:bg-white/5'
                     }`}
                 >
-                  <Icon size={18} strokeWidth={active ? 3 : 2} />
+                  <Icon size={16} />
                   {label}
                 </Link>
               );
@@ -49,15 +49,15 @@ export default function Navbar() {
           {/* Mobile toggle */}
           <button
             onClick={() => setOpen(!open)}
-            className="md:hidden p-2 border-2 border-white bg-black text-white hover:bg-brand-500 hover:text-black transition-colors shadow-[4px_4px_0px_0px_rgba(255,255,255,1)]"
+            className="md:hidden p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5"
           >
-            {open ? <X size={24} strokeWidth={3} /> : <Menu size={24} strokeWidth={3} />}
+            {open ? <X size={22} /> : <Menu size={22} />}
           </button>
         </div>
 
         {/* Mobile menu */}
         {open && (
-          <div className="md:hidden pb-6 pt-4 border-t-4 border-white mt-4 flex flex-col gap-3">
+          <div className="md:hidden pb-4 border-t border-white/5 mt-2 pt-3">
             {NAV_LINKS.map(({ path, label, icon: Icon }) => {
               const active = location.pathname === path;
               return (
@@ -65,13 +65,13 @@ export default function Navbar() {
                   key={path}
                   to={path}
                   onClick={() => setOpen(false)}
-                  className={`flex items-center gap-4 px-5 py-4 border-2 transition-all uppercase font-bold tracking-widest
+                  className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all
                     ${active
-                      ? 'bg-brand-500 text-black border-brand-500 shadow-[4px_4px_0px_0px_rgba(255,255,255,1)]'
-                      : 'text-white border-white bg-black hover:bg-surface-800 shadow-[4px_4px_0px_0px_rgba(255,255,255,1)]'
+                      ? 'bg-brand-500/20 text-brand-300'
+                      : 'text-slate-400 hover:text-white hover:bg-white/5'
                     }`}
                 >
-                  <Icon size={20} strokeWidth={active ? 3 : 2} />
+                  <Icon size={18} />
                   {label}
                 </Link>
               );
