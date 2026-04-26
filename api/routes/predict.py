@@ -6,6 +6,7 @@ POST /api/v1/predict
   Calls predict_salary() from pipeline/predict.py.
 """
 
+import os
 import json
 import logging
 import requests
@@ -99,7 +100,10 @@ async def predict_from_resume(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=f"Failed to read PDF: {str(e)}")
 
     # Call OpenRouter API
-    api_key = "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"
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        logger.error("OPENROUTER_API_KEY not set")
+        raise HTTPException(status_code=500, detail="Resume parsing service misconfigured")
     url = "https://openrouter.ai/api/v1/chat/completions"
     
     prompt = f"""

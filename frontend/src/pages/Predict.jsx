@@ -7,8 +7,9 @@ const CITIES = [
   'New York, NY, USA', 'San Francisco, CA, USA', 'Seattle, WA, USA',
   'Austin, TX, USA', 'Chicago, IL, USA', 'Boston, MA, USA',
   'London, UK', 'Berlin, Germany', 'Toronto, Canada',
-  'Bangalore, India', 'Singapore', 'Sydney, Australia',
-  'Dublin, Ireland', 'Amsterdam, Netherlands', 'Dubai, UAE', 'Tokyo, Japan',
+  'Singapore', 'Sydney, Australia', 'Dublin, Ireland', 
+  'Amsterdam, Netherlands', 'Dubai, UAE', 'Tokyo, Japan',
+  'Bangalore, India', 'Gurugram, India', 'Hyderabad, India', 'Pune, India',
 ];
 
 const SENIORITY = [
