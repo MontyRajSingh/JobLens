@@ -1,5 +1,8 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MapPin, Building2, ExternalLink } from 'lucide-react';
+import { MapPin, Building2, ExternalLink, Star } from 'lucide-react';
+import { useAuth } from '../auth/AuthProvider';
+import { addFavoriteJob, getFavoriteJob, removeFavoriteJob } from '../api/userData';
 
 function remoteBadge(type) {
   if (!type) return null;
@@ -10,9 +13,52 @@ function remoteBadge(type) {
 }
 
 export default function JobCard({ job }) {
+  const { configured, user, signInWithGoogle } = useAuth();
+  const [favorite, setFavorite] = useState(false);
+  const [savingFavorite, setSavingFavorite] = useState(false);
   const skills = job.skills_required
     ? job.skills_required.split(',').map(s => s.trim()).filter(Boolean).slice(0, 4)
     : [];
+
+  useEffect(() => {
+    let active = true;
+    if (!configured || !user || !job.id) {
+      setFavorite(false);
+      return undefined;
+    }
+    getFavoriteJob(user.id, job.id)
+      .then(row => {
+        if (active) setFavorite(Boolean(row));
+      })
+      .catch(() => {
+        if (active) setFavorite(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [configured, user, job.id]);
+
+  const toggleFavorite = async () => {
+    setSavingFavorite(true);
+    try {
+      if (!configured) throw new Error('Supabase is not configured.');
+      if (!user) {
+        await signInWithGoogle();
+        return;
+      }
+      if (favorite) {
+        await removeFavoriteJob(user.id, job.id);
+        setFavorite(false);
+      } else {
+        await addFavoriteJob(user.id, job);
+        setFavorite(true);
+      }
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setSavingFavorite(false);
+    }
+  };
 
   return (
     <div className="glass rounded-xl p-5 hover:border-brand-500/30 transition-all duration-300 group hover:-translate-y-0.5 hover:shadow-lg hover:shadow-brand-500/5">
@@ -41,6 +87,17 @@ export default function JobCard({ job }) {
           <div className="shrink-0">
             <span className="text-slate-500 text-sm italic">Not disclosed</span>
           </div>
+        )}
+        {configured && (
+          <button
+            type="button"
+            onClick={toggleFavorite}
+            disabled={savingFavorite || !job.id}
+            className={`shrink-0 border-2 p-2 ${favorite ? 'bg-brand-500 text-black border-brand-500' : 'bg-black text-white border-white'}`}
+            title={favorite ? 'Remove favorite' : 'Favorite job'}
+          >
+            <Star size={16} fill={favorite ? 'currentColor' : 'none'} />
+          </button>
         )}
       </div>
 
