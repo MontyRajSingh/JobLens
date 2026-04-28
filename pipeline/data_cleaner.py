@@ -24,6 +24,7 @@ from utils.text_utils import (
     clean_text, parse_linkedin_metadata, infer_seniority,
     extract_experience, seniority_to_experience,
 )
+from utils.salary_utils import parse_salary_numeric_usd, salary_text_to_number
 
 logger = logging.getLogger(__name__)
 
@@ -162,31 +163,33 @@ class DataCleaner:
     # ──────────────────────────────────────────────
 
     def _step5_extract_salary_numeric(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Extract numeric USD salary from salary string."""
-        def _parse_numeric(salary_str):
+        """Extract numeric USD salary using the shared salary parser."""
+        def _coerce_existing(value):
+            if value is None or pd.isna(value):
+                return np.nan
+            try:
+                numeric = float(value)
+            except (TypeError, ValueError):
+                numeric = salary_text_to_number(str(value))
+            if numeric is None or numeric < 5_000 or numeric > 5_000_000:
+                return np.nan
+            return round(float(numeric), 2)
+
+        def _parse_row(row):
+            existing = _coerce_existing(row.get("salary_usd_numeric"))
+            if pd.notna(existing):
+                return existing
+
+            salary_str = row.get("salary")
             if not salary_str or pd.isna(salary_str):
                 return np.nan
-            text = str(salary_str)
-            # Find all numbers > 1000
-            numbers = re.findall(r"[\d,]+\.?\d*", text)
-            values = []
-            for n in numbers:
-                try:
-                    val = float(n.replace(",", ""))
-                    if val > 1000:
-                        values.append(val)
-                except ValueError:
-                    continue
-            if not values:
-                return np.nan
-            # Take midpoint
-            amount = sum(values) / len(values)
-            # Sanity check
-            if amount < 15_000 or amount > 800_000:
-                return np.nan
-            return round(amount, 2)
 
-        df["salary_usd_numeric"] = df["salary"].apply(_parse_numeric)
+            numeric = parse_salary_numeric_usd(str(salary_str), usd_rate=1.0)
+            if numeric is None:
+                return np.nan
+            return round(float(numeric), 2)
+
+        df["salary_usd_numeric"] = df.apply(_parse_row, axis=1)
         filled = df["salary_usd_numeric"].notna().sum()
         logger.info("Step 5 — Salary numeric: %d/%d rows have numeric salary", filled, len(df))
         return df

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, ExternalLink, MapPin, Building2, Clock, Briefcase, GraduationCap, DollarSign } from 'lucide-react';
 import { getJob } from '../api/client';
 
@@ -72,7 +72,13 @@ export default function JobDetail() {
         <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">{job.job_title}</h1>
-            <p className="text-slate-400 text-lg">{job.company_name || 'Company not listed'}</p>
+            {job.company_name ? (
+              <Link to={`/companies/${encodeURIComponent(job.company_name)}`} className="text-slate-400 text-lg hover:text-brand-300">
+                {job.company_name}
+              </Link>
+            ) : (
+              <p className="text-slate-400 text-lg">Company not listed</p>
+            )}
             <div className="flex items-center gap-2 mt-2 text-slate-500">
               <MapPin size={14} /> {job.city}
             </div>

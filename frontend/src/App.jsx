@@ -5,6 +5,8 @@ import Jobs from './pages/Jobs';
 import JobDetail from './pages/JobDetail';
 import Predict from './pages/Predict';
 import Insights from './pages/Insights';
+import OfferAnalyzer from './pages/OfferAnalyzer';
+import CompanyProfile from './pages/CompanyProfile';
 import ParallaxStarsBackground from './components/ParallaxStarsBackground';
 
 export default function App() {
@@ -18,7 +20,9 @@ export default function App() {
           <Route path="/jobs" element={<Jobs />} />
           <Route path="/jobs/:id" element={<JobDetail />} />
           <Route path="/predict" element={<Predict />} />
+          <Route path="/offer" element={<OfferAnalyzer />} />
           <Route path="/insights" element={<Insights />} />
+          <Route path="/companies/:companyName" element={<CompanyProfile />} />
         </Routes>
       </main>
     </div>

@@ -55,6 +55,22 @@ def _format_usd(amount: float) -> Optional[str]:
     return f"${amount:,.0f} USD/yr"
 
 
+def salary_text_to_number(formatted_salary: Optional[str]) -> Optional[float]:
+    """Extract the numeric USD amount from a formatted salary string."""
+    if not formatted_salary:
+        return None
+    match = re.search(r"([\d,]+\.?\d*)", str(formatted_salary))
+    if not match:
+        return None
+    return _parse_number(match.group(1))
+
+
+def parse_salary_numeric_usd(raw: str, usd_rate: float = 1.0) -> Optional[float]:
+    """Parse salary text and return annual USD as a number."""
+    formatted = parse_salary_to_usd(raw, usd_rate=usd_rate)
+    return salary_text_to_number(formatted)
+
+
 # ──────────────────────────────────────────────
 # Core: parse a single raw salary string
 # ──────────────────────────────────────────────
@@ -164,6 +180,12 @@ def extract_salary_from_text(text: str, usd_rate: float = 1.0) -> Optional[str]:
                 return result
 
     return None
+
+
+def extract_salary_numeric_from_text(text: str, usd_rate: float = 1.0) -> Optional[float]:
+    """Scan free-form text and return annual USD as a number."""
+    formatted = extract_salary_from_text(text, usd_rate=usd_rate)
+    return salary_text_to_number(formatted)
 
 
 # ──────────────────────────────────────────────

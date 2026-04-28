@@ -42,6 +42,7 @@ export default function Predict() {
     has_bonus: false,
   });
   const [result, setResult] = useState(null);
+  const [resumeAnalysis, setResumeAnalysis] = useState(null);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
@@ -58,6 +59,18 @@ export default function Predict() {
     }));
   };
 
+  const runPrediction = async (inputForm) => {
+    const payload = {
+      ...inputForm,
+      experience_years:
+        inputForm.experience_years !== null && inputForm.experience_years !== ''
+          ? parseFloat(inputForm.experience_years)
+          : 0,
+    };
+    const data = await predictSalary(payload);
+    setResult(data);
+  };
+
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
     if (!form.job_title.trim()) return;
@@ -65,14 +78,10 @@ export default function Predict() {
     setLoading(true);
     setError(null);
     setResult(null);
+    setResumeAnalysis(null);
 
     try {
-      const payload = {
-        ...form,
-        experience_years: form.experience_years ? parseFloat(form.experience_years) : undefined,
-      };
-      const data = await predictSalary(payload);
-      setResult(data);
+      await runPrediction(form);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -89,32 +98,43 @@ export default function Predict() {
     }
 
     setUploading(true);
+    setLoading(true);
     setError(null);
+    setResult(null);
+    setResumeAnalysis(null);
     
     try {
-      const { extracted_data } = await predictFromResume(file);
-      
-      // Update form state with extracted values
-      setForm(prev => {
-        const newForm = { ...prev, ...extracted_data };
-        
-        // Ensure skills are proper array
-        if (extracted_data.skills && Array.isArray(extracted_data.skills)) {
-          // Keep only skills that match our preset list to avoid random text
-          const matchedSkills = extracted_data.skills.filter(s => 
-            SKILLS.some(preset => preset.toLowerCase() === s.toLowerCase())
-          ).map(s => SKILLS.find(preset => preset.toLowerCase() === s.toLowerCase()));
-          
-          newForm.skills = matchedSkills;
-        }
-        
-        return newForm;
-      });
+      const { extracted_data, gap_analysis } = await predictFromResume(file);
+      setResumeAnalysis(gap_analysis || null);
+
+      const matchedSkills = Array.isArray(extracted_data.skills)
+        ? extracted_data.skills
+            .filter(s => SKILLS.some(preset => preset.toLowerCase() === String(s).toLowerCase()))
+            .map(s => SKILLS.find(preset => preset.toLowerCase() === String(s).toLowerCase()))
+        : [];
+
+      const nextForm = {
+        ...form,
+        ...extracted_data,
+        job_title: extracted_data.job_title || form.job_title || 'Software Engineer',
+        city: form.city,
+        company_name: extracted_data.company_name || form.company_name,
+        experience_years:
+          extracted_data.experience_years !== undefined && extracted_data.experience_years !== null
+            ? extracted_data.experience_years
+            : 0,
+        skills: matchedSkills,
+      };
+
+      setForm(nextForm);
+
+      await runPrediction(nextForm);
       
     } catch (err) {
       setError(err.message || 'Failed to parse resume.');
     } finally {
       setUploading(false);
+      setLoading(false);
       // Reset input so same file can be selected again
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
@@ -134,7 +154,7 @@ export default function Predict() {
         <div>
           <h2 className="display-text text-3xl text-brand-500 mb-2">AUTO-FILL WITH RESUME</h2>
           <p className="font-bold text-white uppercase tracking-wider text-sm">
-            Upload your PDF resume to instantly extract your skills, experience, and role using Nemotron 3 AI.
+            Select company and city, then upload your PDF resume to extract role, skills, education, and experience before predicting.
           </p>
         </div>
         <input 
@@ -348,6 +368,49 @@ export default function Predict() {
                 </div>
               </div>
 
+              {(result.model_prediction_usd || result.adjustments) && (
+                <div className="brutal-card p-6">
+                  <h3 className="display-text text-xl text-white mb-4">PREDICTION BREAKDOWN</h3>
+                  <div className="space-y-3 font-bold uppercase tracking-wider text-sm">
+                    <div className="flex justify-between border-b border-white/10 pb-2">
+                      <span className="text-slate-400">Raw model estimate</span>
+                      <span className="text-white">${result.model_prediction_usd?.toLocaleString()}</span>
+                    </div>
+                    {result.base_prediction_usd && (
+                      <div className="flex justify-between border-b border-white/10 pb-2">
+                        <span className="text-slate-400">No-skills baseline</span>
+                        <span className="text-white">${result.base_prediction_usd.toLocaleString()}</span>
+                      </div>
+                    )}
+                    {result.adjustments?.skill_applied_premium > 0 && (
+                      <div className="flex justify-between border-b border-white/10 pb-2">
+                        <span className="text-slate-400">Applied skill lift</span>
+                        <span className="text-brand-500">+${result.adjustments.skill_applied_premium.toLocaleString()}</span>
+                      </div>
+                    )}
+                    {result.adjustments?.company_tier_bonus > 0 && (
+                      <div className="flex justify-between border-b border-white/10 pb-2">
+                        <span className="text-slate-400">Company tier</span>
+                        <span className="text-brand-500">+${result.adjustments.company_tier_bonus.toLocaleString()}</span>
+                      </div>
+                    )}
+                    {result.adjustments?.academic_bonus > 0 && (
+                      <div className="flex justify-between border-b border-white/10 pb-2">
+                        <span className="text-slate-400">Academic lift</span>
+                        <span className="text-brand-500">+${result.adjustments.academic_bonus.toLocaleString()}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between pt-1">
+                      <span className="text-slate-400">Final adjusted estimate</span>
+                      <span className="text-brand-500">${(result.adjusted_prediction_usd || result.predicted_salary_usd)?.toLocaleString()}</span>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-4 uppercase font-bold tracking-tighter">
+                    Confidence method: {result.confidence_method || 'model residual estimate'}
+                  </p>
+                </div>
+              )}
+
               {/* Percentile */}
               <div className="brutal-card p-6 flex items-center gap-6">
                 <div className="w-16 h-16 bg-white border-2 border-black shadow-brutal-pink flex items-center justify-center shrink-0">
@@ -380,6 +443,48 @@ export default function Predict() {
                   <p className="text-[10px] text-slate-500 mt-4 uppercase font-bold tracking-tighter">
                     * CALCULATED BASED ON MARKET MEDIANS FOR THIS SENIORITY LEVEL
                   </p>
+                </div>
+              )}
+
+              {resumeAnalysis?.missing_high_value_skills?.length > 0 && (
+                <div className="brutal-card p-6 border-brand-500 bg-brand-500/5">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="display-text text-xl text-brand-500">RESUME GAP ANALYSIS</h3>
+                    <div className="bg-brand-500 text-black px-2 py-1 text-xs font-bold shadow-brutal-mini">
+                      TOP 3 LIFT: +${resumeAnalysis.estimated_top3_lift_usd?.toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    {resumeAnalysis.missing_high_value_skills.slice(0, 5).map(item => (
+                      <div key={item.skill} className="flex justify-between border-b border-white/10 pb-2 last:border-0 font-bold uppercase text-sm">
+                        <span>{item.skill}</span>
+                        <span className="text-brand-500">+${item.estimated_lift_usd.toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {result.similar_jobs?.length > 0 && (
+                <div className="brutal-card p-6">
+                  <h3 className="display-text text-xl text-white mb-4">SIMILAR JOBS BEHIND THIS ESTIMATE</h3>
+                  <div className="space-y-3">
+                    {result.similar_jobs.map(job => (
+                      <button
+                        key={job.id}
+                        onClick={() => navigate(`/jobs/${job.id}`)}
+                        className="w-full text-left border-b border-white/10 pb-3 last:border-0 hover:text-brand-500 transition-colors"
+                      >
+                        <div className="flex justify-between gap-4 font-bold uppercase text-sm">
+                          <span>{job.job_title}</span>
+                          <span>${Math.round(job.salary_usd_numeric).toLocaleString()}</span>
+                        </div>
+                        <p className="text-slate-400 text-xs font-bold uppercase mt-1">
+                          {job.company_name || 'Company not listed'} · {job.city}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -425,7 +530,8 @@ export default function Predict() {
 
               {/* Model info */}
               <div className="flex items-center justify-between font-bold text-xs uppercase text-slate-500 border-t-2 border-white/20 pt-4">
-                <span>MODEL: {result.model_name} v{result.model_version}</span>
+                <span>MODEL: {result.model_name}{result.model_version ? ` v${result.model_version}` : ''}</span>
+                {result.model_rmse && <span>RMSE: ${Math.round(result.model_rmse).toLocaleString()}</span>}
               </div>
 
               {/* Browse similar */}

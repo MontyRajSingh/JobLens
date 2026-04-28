@@ -13,7 +13,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from api.db.database import get_db
-from api.schemas.response import JobRecord, JobSearchResponse
+from api.schemas.response import CompanyProfileResponse, JobRecord, JobSearchResponse
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +147,109 @@ async def search_jobs(
     except Exception as e:
         logger.exception("Job search error")
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
+
+
+@router.get(
+    "/company/{company_name}",
+    response_model=CompanyProfileResponse,
+    summary="Get company compensation profile",
+)
+async def get_company_profile(company_name: str, db: Session = Depends(get_db)):
+    """Get aggregate compensation stats for a company."""
+    try:
+        params = {"company": f"%{company_name.lower()}%"}
+        stats_sql = """
+            SELECT company_name,
+                   COUNT(*) as job_count,
+                   COUNT(salary_usd_numeric) as salary_count,
+                   AVG(salary_usd_numeric) as avg_salary,
+                   MIN(salary_usd_numeric) as min_salary,
+                   MAX(salary_usd_numeric) as max_salary,
+                   AVG(CASE WHEN has_equity > 0 THEN 1.0 ELSE 0.0 END) as equity_freq,
+                   AVG(CASE WHEN has_bonus > 0 THEN 1.0 ELSE 0.0 END) as bonus_freq,
+                   AVG(CASE WHEN LOWER(remote_type) LIKE '%remote%' THEN 1.0 ELSE 0.0 END) as remote_freq
+            FROM jobs
+            WHERE LOWER(company_name) LIKE :company
+            GROUP BY company_name
+            ORDER BY job_count DESC
+            LIMIT 1
+        """
+        row = db.execute(text(stats_sql), params).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Company '{company_name}' not found")
+
+        canonical = row[0]
+        exact_params = {"company": canonical}
+
+        salaries = [
+            r[0] for r in db.execute(text("""
+                SELECT salary_usd_numeric FROM jobs
+                WHERE company_name = :company AND salary_usd_numeric IS NOT NULL
+                ORDER BY salary_usd_numeric
+            """), exact_params).fetchall()
+        ]
+        median = float(salaries[len(salaries) // 2]) if salaries else None
+
+        top_roles = [
+            {"role": r[0], "count": int(r[1]), "avg_salary": round(float(r[2]), 2) if r[2] else None}
+            for r in db.execute(text("""
+                SELECT job_title, COUNT(*) as cnt, AVG(salary_usd_numeric) as avg_sal
+                FROM jobs WHERE company_name = :company
+                GROUP BY job_title ORDER BY cnt DESC LIMIT 5
+            """), exact_params).fetchall()
+        ]
+
+        top_cities = [
+            {"city": r[0], "count": int(r[1]), "avg_salary": round(float(r[2]), 2) if r[2] else None}
+            for r in db.execute(text("""
+                SELECT city, COUNT(*) as cnt, AVG(salary_usd_numeric) as avg_sal
+                FROM jobs WHERE company_name = :company
+                GROUP BY city ORDER BY cnt DESC LIMIT 5
+            """), exact_params).fetchall()
+        ]
+
+        recent_rows = db.execute(text("""
+            SELECT id, job_title, company_name, city, salary, salary_usd_numeric,
+                   seniority_level, experience_required, remote_type, employment_type,
+                   skills_required, source_website, job_link, has_equity, has_bonus,
+                   is_faang, industry
+            FROM jobs WHERE company_name = :company
+            ORDER BY scraped_at DESC NULLS LAST LIMIT 6
+        """), exact_params).fetchall()
+
+        recent_jobs = [
+            JobRecord(
+                id=r[0], job_title=r[1], company_name=r[2], city=r[3], salary=r[4],
+                salary_usd_numeric=r[5], seniority_level=r[6], experience_required=r[7],
+                remote_type=r[8], employment_type=r[9], skills_required=r[10],
+                source_website=r[11], job_link=r[12],
+                has_equity=bool(r[13]) if r[13] is not None else None,
+                has_bonus=bool(r[14]) if r[14] is not None else None,
+                is_faang=r[15], industry=r[16],
+            )
+            for r in recent_rows
+        ]
+
+        return CompanyProfileResponse(
+            company_name=canonical,
+            job_count=int(row[1]),
+            salary_count=int(row[2]),
+            avg_salary=round(float(row[3]), 2) if row[3] else None,
+            median_salary=round(median, 2) if median else None,
+            salary_min=round(float(row[4]), 2) if row[4] else None,
+            salary_max=round(float(row[5]), 2) if row[5] else None,
+            equity_frequency_pct=round(float(row[6] or 0) * 100, 1),
+            bonus_frequency_pct=round(float(row[7] or 0) * 100, 1),
+            remote_frequency_pct=round(float(row[8] or 0) * 100, 1),
+            top_roles=top_roles,
+            top_cities=top_cities,
+            recent_jobs=recent_jobs,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Company profile error")
+        raise HTTPException(status_code=500, detail=f"Failed to get company profile: {str(e)}")
 
 
 @router.get(

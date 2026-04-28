@@ -24,6 +24,14 @@ class PredictRequest(BaseModel):
     has_bonus: bool = Field(default=False, description="Has bonus compensation")
 
 
+class OfferAnalyzeRequest(PredictRequest):
+    """Request body for POST /api/v1/predict/offer."""
+
+    base_salary_usd: int = Field(..., ge=0, le=1_000_000, description="Annual base salary offer in USD")
+    annual_bonus_usd: int = Field(default=0, ge=0, le=1_000_000, description="Expected annual cash bonus in USD")
+    annual_equity_usd: int = Field(default=0, ge=0, le=1_000_000, description="Annualized equity value in USD")
+
+
 class JobSearchRequest(BaseModel):
     """Query parameters for GET /api/v1/jobs (used as dependency)."""
 

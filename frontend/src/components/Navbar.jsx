@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X, TrendingUp, Briefcase, Search, BarChart3, DollarSign } from 'lucide-react';
+import { Menu, X, TrendingUp, Briefcase, Search, BarChart3, DollarSign, BriefcaseBusiness } from 'lucide-react';
 
 const NAV_LINKS = [
   { path: '/', label: 'Home', icon: TrendingUp },
   { path: '/jobs', label: 'Jobs', icon: Briefcase },
   { path: '/predict', label: 'Predict', icon: DollarSign },
+  { path: '/offer', label: 'Offer', icon: BriefcaseBusiness },
   { path: '/insights', label: 'Insights', icon: BarChart3 },
 ];
 
