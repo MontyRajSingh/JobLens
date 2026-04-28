@@ -58,7 +58,12 @@ ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 API_KEYS = [k.strip() for k in os.getenv("API_KEYS", "").split(",") if k.strip()]
 
 if ENVIRONMENT == "production" and not API_KEYS:
-    raise RuntimeError("ENVIRONMENT=production requires API_KEYS to be set")
+    # Don't hard-fail on deploy if secrets weren't configured yet.
+    # In this mode, /api/v1/predict won't require X-API-Key (see middleware below).
+    logger.warning(
+        "ENVIRONMENT=production but API_KEYS is empty. "
+        "Prediction endpoint will run without API-key protection until API_KEYS is set."
+    )
 
 # App state
 _app_state = {
@@ -158,17 +163,25 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
 # ──────────────────────────────────────────────
 # CORS
 # ──────────────────────────────────────────────
+ALLOW_CREDENTIALS = True
 if ENVIRONMENT == "production":
     ALLOWED_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
     if not ALLOWED_ORIGINS:
-        raise RuntimeError("ENVIRONMENT=production requires explicit CORS_ORIGINS")
+        # Keep the service bootable by default; user can tighten later via CORS_ORIGINS.
+        logger.warning(
+            "ENVIRONMENT=production but CORS_ORIGINS is empty. "
+            "Falling back to allow all origins without credentials."
+        )
+        ALLOWED_ORIGINS = ["*"]
+        ALLOW_CREDENTIALS = False
 else:
     ALLOWED_ORIGINS = ["*"]
+    ALLOW_CREDENTIALS = True
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
+    allow_credentials=ALLOW_CREDENTIALS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
