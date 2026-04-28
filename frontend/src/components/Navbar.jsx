@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X, TrendingUp, Briefcase, Search, BarChart3, DollarSign, BriefcaseBusiness } from 'lucide-react';
+import { Menu, X, TrendingUp, Briefcase, Search, BarChart3, DollarSign, BriefcaseBusiness, Clock } from 'lucide-react';
+import { useAuth } from '../auth/AuthProvider';
 
 const NAV_LINKS = [
   { path: '/', label: 'Home', icon: TrendingUp },
@@ -13,6 +14,7 @@ const NAV_LINKS = [
 export default function Navbar() {
   const [open, setOpen] = useState(false);
   const location = useLocation();
+  const { configured, user, signOut } = useAuth();
 
   return (
     <nav className="sticky top-0 z-50 bg-black border-b-4 border-white shadow-brutal-white">
@@ -28,7 +30,7 @@ export default function Navbar() {
 
           {/* Desktop links */}
           <div className="hidden md:flex items-center gap-4">
-            {NAV_LINKS.map(({ path, label, icon: Icon }) => {
+            {[...NAV_LINKS, ...(user ? [{ path: '/history', label: 'History', icon: Clock }] : [])].map(({ path, label, icon: Icon }) => {
               const active = location.pathname === path;
               return (
                 <Link
@@ -45,6 +47,26 @@ export default function Navbar() {
                 </Link>
               );
             })}
+            {configured && user ? (
+              <div className="flex items-center gap-3">
+                <span className="max-w-40 truncate text-xs text-slate-400 font-bold uppercase">
+                  {user.user_metadata?.full_name || user.email}
+                </span>
+                <button
+                  onClick={signOut}
+                  className="px-4 py-2 border-2 border-white text-white uppercase font-bold tracking-wider text-sm hover:bg-white hover:text-black"
+                >
+                  Logout
+                </button>
+              </div>
+            ) : configured ? (
+              <Link
+                to="/login"
+                className="px-4 py-2 border-2 border-brand-500 bg-brand-500 text-black uppercase font-bold tracking-wider text-sm shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] hover:bg-black hover:text-brand-500 transition-colors"
+              >
+                Sign in
+              </Link>
+            ) : null}
           </div>
 
           {/* Mobile toggle */}
@@ -59,7 +81,7 @@ export default function Navbar() {
         {/* Mobile menu */}
         {open && (
           <div className="md:hidden pb-6 pt-4 border-t-4 border-white mt-4 flex flex-col gap-3">
-            {NAV_LINKS.map(({ path, label, icon: Icon }) => {
+            {[...NAV_LINKS, ...(user ? [{ path: '/history', label: 'History', icon: Clock }] : [])].map(({ path, label, icon: Icon }) => {
               const active = location.pathname === path;
               return (
                 <Link
@@ -77,6 +99,28 @@ export default function Navbar() {
                 </Link>
               );
             })}
+            {configured && user ? (
+              <>
+                <span className="text-slate-400 text-xs font-bold uppercase px-1">{user.user_metadata?.full_name || user.email}</span>
+                <button
+                  onClick={() => {
+                    signOut();
+                    setOpen(false);
+                  }}
+                  className="text-white border-white bg-black px-5 py-4 border-2 uppercase font-bold tracking-widest shadow-[4px_4px_0px_0px_rgba(255,255,255,1)]"
+                >
+                  Logout
+                </button>
+              </>
+            ) : configured ? (
+              <Link
+                to="/login"
+                onClick={() => setOpen(false)}
+                className="bg-brand-500 text-black border-brand-500 px-5 py-4 border-2 uppercase font-bold tracking-widest shadow-[4px_4px_0px_0px_rgba(255,255,255,1)] hover:bg-black hover:text-brand-500 transition-colors"
+              >
+                Sign in
+              </Link>
+            ) : null}
           </div>
         )}
       </div>

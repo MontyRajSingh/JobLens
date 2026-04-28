@@ -2,6 +2,8 @@ import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DollarSign, TrendingUp, Award, ArrowRight, Loader2, UploadCloud } from 'lucide-react';
 import { predictSalary, predictFromResume } from '../api/client';
+import { useAuth } from '../auth/AuthProvider';
+import { savePrediction, saveResume, uploadResumePdf } from '../api/userData';
 
 const CITIES = [
   'New York, NY, USA', 'San Francisco, CA, USA', 'Seattle, WA, USA',
@@ -28,6 +30,7 @@ const SKILLS = [
 
 export default function Predict() {
   const navigate = useNavigate();
+  const { configured, user, signInWithGoogle } = useAuth();
   const [form, setForm] = useState({
     job_title: '',
     city: 'New York, NY, USA',
@@ -45,6 +48,8 @@ export default function Predict() {
   const [resumeAnalysis, setResumeAnalysis] = useState(null);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState(null);
   const [error, setError] = useState(null);
   const fileInputRef = useRef(null);
 
@@ -69,6 +74,31 @@ export default function Predict() {
     };
     const data = await predictSalary(payload);
     setResult(data);
+    return { payload, data };
+  };
+
+  const requireLogin = async () => {
+    if (!configured) throw new Error('Supabase is not configured.');
+    if (!user) {
+      await signInWithGoogle();
+      return null;
+    }
+    return user;
+  };
+
+  const handleSavePrediction = async () => {
+    setSaving(true);
+    setSaveMessage(null);
+    try {
+      const activeUser = await requireLogin();
+      if (!activeUser) return;
+      await savePrediction(activeUser.id, form, result);
+      setSaveMessage('Prediction saved.');
+    } catch (err) {
+      setSaveMessage(err.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -128,7 +158,17 @@ export default function Predict() {
 
       setForm(nextForm);
 
-      await runPrediction(nextForm);
+      const { data } = await runPrediction(nextForm);
+
+      if (configured && user) {
+        try {
+          const filePath = await uploadResumePdf(user.id, file);
+          await saveResume(user.id, filePath, extracted_data, gap_analysis || null, data);
+          setSaveMessage('Resume analysis saved.');
+        } catch (saveErr) {
+          setSaveMessage(`Resume parsed, but save failed: ${saveErr.message}`);
+        }
+      }
       
     } catch (err) {
       setError(err.message || 'Failed to parse resume.');
@@ -366,6 +406,17 @@ export default function Predict() {
                     />
                   </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={handleSavePrediction}
+                  disabled={saving || !result || !configured}
+                  className="mt-6 w-full py-3 border-2 border-brand-500 text-brand-500 hover:bg-brand-500 hover:text-black transition-colors font-bold uppercase tracking-widest disabled:opacity-50"
+                >
+                  {saving ? 'SAVING...' : !configured ? 'SUPABASE NOT CONFIGURED' : user ? 'SAVE PREDICTION' : 'SIGN IN TO SAVE'}
+                </button>
+                {saveMessage && (
+                  <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-3">{saveMessage}</p>
+                )}
               </div>
 
               {(result.model_prediction_usd || result.adjustments) && (

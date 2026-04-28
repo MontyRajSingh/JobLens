@@ -1,12 +1,17 @@
 import { useState, useEffect } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ExternalLink, MapPin, Building2, Clock, Briefcase, GraduationCap, DollarSign } from 'lucide-react';
+import { ArrowLeft, ExternalLink, MapPin, Building2, Clock, Briefcase, GraduationCap, DollarSign, Star } from 'lucide-react';
 import { getJob } from '../api/client';
+import { useAuth } from '../auth/AuthProvider';
+import { addFavoriteJob, getFavoriteJob, removeFavoriteJob } from '../api/userData';
 
 export default function JobDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { configured, user, signInWithGoogle } = useAuth();
   const [job, setJob] = useState(null);
+  const [favorite, setFavorite] = useState(false);
+  const [savingFavorite, setSavingFavorite] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -24,6 +29,46 @@ export default function JobDetail() {
     };
     load();
   }, [id]);
+
+  useEffect(() => {
+    let active = true;
+    if (!configured || !user || !job?.id) {
+      setFavorite(false);
+      return undefined;
+    }
+    getFavoriteJob(user.id, job.id)
+      .then(row => {
+        if (active) setFavorite(Boolean(row));
+      })
+      .catch(() => {
+        if (active) setFavorite(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [configured, user, job?.id]);
+
+  const toggleFavorite = async () => {
+    setSavingFavorite(true);
+    try {
+      if (!configured) throw new Error('Supabase is not configured.');
+      if (!user) {
+        await signInWithGoogle();
+        return;
+      }
+      if (favorite) {
+        await removeFavoriteJob(user.id, job.id);
+        setFavorite(false);
+      } else {
+        await addFavoriteJob(user.id, job);
+        setFavorite(true);
+      }
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setSavingFavorite(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -89,6 +134,17 @@ export default function JobDetail() {
               <p className="text-3xl font-bold text-brand-300">${job.salary_usd_numeric.toLocaleString()}</p>
               <p className="text-slate-500">USD / year</p>
             </div>
+          )}
+          {configured && (
+            <button
+              type="button"
+              onClick={toggleFavorite}
+              disabled={savingFavorite || !job.id}
+              className={`shrink-0 border-2 px-4 py-3 font-bold uppercase tracking-widest flex items-center gap-2 ${favorite ? 'bg-brand-500 text-black border-brand-500' : 'bg-black text-white border-white'}`}
+            >
+              <Star size={18} fill={favorite ? 'currentColor' : 'none'} />
+              {favorite ? 'Favorited' : 'Favorite'}
+            </button>
           )}
         </div>
 

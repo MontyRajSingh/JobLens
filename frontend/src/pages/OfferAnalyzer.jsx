@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { BriefcaseBusiness, Loader2 } from 'lucide-react';
 import { analyzeOffer } from '../api/client';
+import { useAuth } from '../auth/AuthProvider';
+import { saveOffer } from '../api/userData';
 
 const CITIES = [
   'New York, NY, USA', 'San Francisco, CA, USA', 'Seattle, WA, USA',
@@ -14,11 +16,12 @@ const SENIORITY = [
 ];
 
 export default function OfferAnalyzer() {
+  const { configured, user, signInWithGoogle } = useAuth();
   const [form, setForm] = useState({
     job_title: '',
     city: 'New York, NY, USA',
     seniority_level: 'Mid-Level (2-5 years)',
-    skills: [],
+    skills: '',
     experience_years: 0,
     employment_type: 'Full-time',
     remote_type: 'On-site',
@@ -31,7 +34,10 @@ export default function OfferAnalyzer() {
     annual_equity_usd: '',
   });
   const [result, setResult] = useState(null);
+  const [lastPayload, setLastPayload] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState(null);
   const [error, setError] = useState(null);
 
   const update = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
@@ -52,11 +58,31 @@ export default function OfferAnalyzer() {
         has_bonus: Number(form.annual_bonus_usd || 0) > 0,
         has_equity: Number(form.annual_equity_usd || 0) > 0,
       };
-      setResult(await analyzeOffer(payload));
+      const data = await analyzeOffer(payload);
+      setLastPayload(payload);
+      setResult(data);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const saveCurrentOffer = async () => {
+    setSaving(true);
+    setSaveMessage(null);
+    try {
+      if (!configured) throw new Error('Supabase is not configured.');
+      if (!user) {
+        await signInWithGoogle();
+        return;
+      }
+      await saveOffer(user.id, lastPayload, result);
+      setSaveMessage('Offer analysis saved.');
+    } catch (err) {
+      setSaveMessage(err.message);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -109,6 +135,17 @@ export default function OfferAnalyzer() {
                 <div className="flex justify-between"><span className="text-slate-400">Evidence jobs</span><span>{result.evidence_count}</span></div>
               </div>
               <p className="mt-6 text-slate-300 font-bold uppercase tracking-wider">{result.recommendation}</p>
+              <button
+                type="button"
+                onClick={saveCurrentOffer}
+                disabled={saving || !result || !configured}
+                className="mt-6 w-full py-3 border-2 border-brand-500 text-brand-500 hover:bg-brand-500 hover:text-black transition-colors font-bold uppercase tracking-widest disabled:opacity-50"
+              >
+                {saving ? 'SAVING...' : !configured ? 'SUPABASE NOT CONFIGURED' : user ? 'SAVE OFFER ANALYSIS' : 'SIGN IN TO SAVE'}
+              </button>
+              {saveMessage && (
+                <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-3">{saveMessage}</p>
+              )}
             </div>
           ) : (
             <div className="border-4 border-white border-dashed p-12 text-center bg-black/50">
