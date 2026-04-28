@@ -23,7 +23,13 @@ export default function JobCard({ job }) {
           </h3>
           <div className="flex items-center gap-2 mt-1 text-slate-400 text-sm">
             <Building2 size={14} className="shrink-0" />
-            <span className="truncate">{job.company_name || 'Company not listed'}</span>
+            {job.company_name ? (
+              <Link to={`/companies/${encodeURIComponent(job.company_name)}`} className="truncate hover:text-brand-300">
+                {job.company_name}
+              </Link>
+            ) : (
+              <span className="truncate">Company not listed</span>
+            )}
           </div>
         </div>
         {job.salary_usd_numeric ? (

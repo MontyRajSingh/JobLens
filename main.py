@@ -17,6 +17,7 @@ import json
 import hashlib
 import argparse
 import logging
+import time
 from datetime import datetime
 from typing import List, Tuple, Optional
 from collections import Counter
@@ -108,6 +109,7 @@ def run_pipeline(
         return [], []
 
     all_jobs = []
+    health_events = []
 
     # Main loop: city × keyword × source
     for city_search, city_linkedin, currency, usd_rate in cities:
@@ -119,6 +121,7 @@ def run_pipeline(
                 )
 
                 try:
+                    started_at = time.time()
                     # Choose location format based on scraper
                     if src_name == "linkedin":
                         location = city_linkedin
@@ -132,6 +135,7 @@ def run_pipeline(
                         usd_rate=usd_rate,
                         max_jobs=max_jobs,
                     )
+                    duration_sec = round(time.time() - started_at, 2)
 
                     # Stamp city on every job
                     for job in jobs:
@@ -165,9 +169,44 @@ def run_pipeline(
                             logger.warning("⚠️  Incremental save failed: %s", save_err)
 
                     all_jobs.extend(jobs)
+                    salary_hits = sum(1 for job in jobs if job.get("salary") or job.get("salary_usd_numeric"))
+                    health_events.append({
+                        "source": src_name,
+                        "keyword": keyword,
+                        "city": city_search,
+                        "status": "success",
+                        "jobs_found": len(jobs),
+                        "salary_hits": salary_hits,
+                        "salary_hit_rate_pct": round((salary_hits / len(jobs) * 100), 2) if jobs else 0.0,
+                        "duration_sec": duration_sec,
+                        "error": None,
+                        "scraped_at": datetime.utcnow().isoformat(),
+                    })
 
                 except Exception as e:
                     logger.error("❌ [%s] '%s' in '%s' failed: %s", src_name.upper(), keyword, city_search, e)
+                    health_events.append({
+                        "source": src_name,
+                        "keyword": keyword,
+                        "city": city_search,
+                        "status": "failed",
+                        "jobs_found": 0,
+                        "salary_hits": 0,
+                        "salary_hit_rate_pct": 0.0,
+                        "duration_sec": round(time.time() - started_at, 2) if "started_at" in locals() else 0.0,
+                        "error": str(e),
+                        "scraped_at": datetime.utcnow().isoformat(),
+                    })
+
+    if health_events:
+        health_path = os.path.join(OUTPUT_DIR, "scraper_health_latest.json")
+        with open(health_path, "w") as f:
+            json.dump({
+                "generated_at": datetime.utcnow().isoformat(),
+                "events": health_events,
+                "summary": _summarize_scraper_health(health_events),
+            }, f, indent=2)
+        logger.info("🩺 Saved scraper health report → %s", health_path)
 
     # Generate dedup_key where missing
     for job in all_jobs:
@@ -221,6 +260,36 @@ def run_pipeline(
 
     logger.warning("No jobs collected!")
     return [], []
+
+
+def _summarize_scraper_health(events: List[dict]) -> dict:
+    """Aggregate per-run scraper health metrics."""
+    summary = {}
+    for event in events:
+        source = event["source"]
+        bucket = summary.setdefault(source, {
+            "tasks": 0,
+            "successes": 0,
+            "failures": 0,
+            "jobs_found": 0,
+            "salary_hits": 0,
+            "avg_duration_sec": 0.0,
+        })
+        bucket["tasks"] += 1
+        bucket["successes"] += 1 if event["status"] == "success" else 0
+        bucket["failures"] += 1 if event["status"] == "failed" else 0
+        bucket["jobs_found"] += event["jobs_found"]
+        bucket["salary_hits"] += event["salary_hits"]
+        bucket["avg_duration_sec"] += event["duration_sec"]
+
+    for bucket in summary.values():
+        tasks = bucket["tasks"] or 1
+        jobs = bucket["jobs_found"]
+        bucket["avg_duration_sec"] = round(bucket["avg_duration_sec"] / tasks, 2)
+        bucket["success_rate_pct"] = round(bucket["successes"] / tasks * 100, 2)
+        bucket["salary_hit_rate_pct"] = round(bucket["salary_hits"] / jobs * 100, 2) if jobs else 0.0
+
+    return summary
 
 
 def print_quality_report(jobs: List[dict]) -> None:

@@ -4,7 +4,7 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 const client = axios.create({
   baseURL: API_BASE,
-  timeout: 30000,
+  timeout: 120000,
 });
 
 // Request interceptor
@@ -42,8 +42,11 @@ export const predictFromResume = (file) => {
   const formData = new FormData();
   formData.append('file', file);
   // Do not set Content-Type manually, let Axios set it with the boundary automatically
-  return client.post('/api/v1/predict/resume', formData);
+  return client.post('/api/v1/predict/resume', formData, { timeout: 180000 });
 };
+
+export const analyzeOffer = (payload) =>
+  client.post('/api/v1/predict/offer', payload);
 
 // ── Jobs ──
 export const searchJobs = (params) =>
@@ -51,6 +54,9 @@ export const searchJobs = (params) =>
 
 export const getJob = (id) =>
   client.get(`/api/v1/jobs/${id}`);
+
+export const getCompanyProfile = (companyName) =>
+  client.get(`/api/v1/jobs/company/${encodeURIComponent(companyName)}`);
 
 // ── Insights ──
 export const getSalaryByCity = (keyword) =>

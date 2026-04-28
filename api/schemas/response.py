@@ -13,17 +13,46 @@ class PredictResponse(BaseModel):
     """Response body for POST /api/v1/predict."""
 
     predicted_salary_usd: int = Field(..., description="Predicted annual salary in USD")
+    model_prediction_usd: Optional[int] = Field(
+        default=None,
+        description="Raw model prediction before heuristic business adjustments",
+    )
+    adjusted_prediction_usd: Optional[int] = Field(
+        default=None,
+        description="Final prediction after transparent heuristic adjustments",
+    )
+    base_prediction_usd: Optional[int] = Field(
+        default=None,
+        description="Model prediction with skills removed, used for skill premium comparison",
+    )
     confidence_low: int = Field(..., description="Lower bound of confidence interval")
     confidence_high: int = Field(..., description="Upper bound of confidence interval")
+    confidence_method: Optional[str] = Field(default=None, description="How the confidence interval was calculated")
     percentile: int = Field(..., description="Salary percentile within training data")
     top_features: List[Dict[str, Any]] = Field(default=[], description="Top contributing features")
+    adjustments: Dict[str, Any] = Field(default={}, description="Transparent non-model salary adjustments")
     skill_bonuses: List[Dict[str, Any]] = Field(default=[], description="Individual skill premiums (+$X)")
     total_skill_premium: int = Field(default=0, description="Total salary lift from skills")
     company_tier: Optional[Dict[str, Any]] = Field(default=None, description="Company prestige tier information")
     academic_bonus: Optional[Dict[str, Any]] = Field(default=None, description="Academic degree bonus information")
     similar_jobs_count: int = Field(default=0, description="Count of similar salary jobs in training data")
+    similar_jobs: List[Dict[str, Any]] = Field(default=[], description="Similar market jobs behind the prediction")
     model_name: str = Field(..., description="Name of the model used")
+    model_version: Optional[str] = Field(default=None, description="Model artifact version")
     model_rmse: Optional[float] = Field(default=None, description="Model RMSE on test set")
+
+
+class OfferAnalyzeResponse(BaseModel):
+    """Response body for POST /api/v1/predict/offer."""
+
+    total_comp_usd: int
+    market_reference_usd: int
+    difference_usd: int
+    difference_pct: float
+    verdict: str
+    recommendation: str
+    evidence_count: int
+    predicted_salary_usd: Optional[int] = None
 
 
 class JobRecord(BaseModel):
@@ -46,6 +75,24 @@ class JobRecord(BaseModel):
     has_bonus: Optional[bool] = None
     is_faang: Optional[int] = None
     industry: Optional[str] = None
+
+
+class CompanyProfileResponse(BaseModel):
+    """Company compensation profile."""
+
+    company_name: str
+    job_count: int
+    salary_count: int
+    avg_salary: Optional[float] = None
+    median_salary: Optional[float] = None
+    salary_min: Optional[float] = None
+    salary_max: Optional[float] = None
+    equity_frequency_pct: float = 0.0
+    bonus_frequency_pct: float = 0.0
+    remote_frequency_pct: float = 0.0
+    top_roles: List[Dict[str, Any]] = []
+    top_cities: List[Dict[str, Any]] = []
+    recent_jobs: List[JobRecord] = []
 
 
 class JobSearchResponse(BaseModel):

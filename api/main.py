@@ -57,6 +57,9 @@ DATA_DIR = os.getenv("DATA_DIR", os.path.join(os.path.dirname(__file__), "..", "
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 API_KEYS = [k.strip() for k in os.getenv("API_KEYS", "").split(",") if k.strip()]
 
+if ENVIRONMENT == "production" and not API_KEYS:
+    raise RuntimeError("ENVIRONMENT=production requires API_KEYS to be set")
+
 # App state
 _app_state = {
     "model_loaded": False,
@@ -158,7 +161,7 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
 if ENVIRONMENT == "production":
     ALLOWED_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
     if not ALLOWED_ORIGINS:
-        ALLOWED_ORIGINS = ["*"]
+        raise RuntimeError("ENVIRONMENT=production requires explicit CORS_ORIGINS")
 else:
     ALLOWED_ORIGINS = ["*"]
 

@@ -33,5 +33,10 @@ __pycache__/
 .env.*
 !.env.example
 
+
 # NOTE: we DO commit pipeline/models/ so Railway has the trained model at deploy time.
 # Do NOT add pipeline/models/ here.
+
+# Graphify exclusions
+graphify-out/
+.graphify_*

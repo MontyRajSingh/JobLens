@@ -21,6 +21,7 @@ import os
 import sys
 import argparse
 import logging
+import json
 
 import pandas as pd
 
@@ -29,6 +30,7 @@ from config import OUTPUT_DIR
 from pipeline.data_cleaner import DataCleaner
 from pipeline.preprocessing import FeatureEngineer
 from pipeline.model import SalaryPredictor
+from pipeline.data_quality import evaluate_training_readiness
 
 logging.basicConfig(
     level=logging.INFO,
@@ -42,6 +44,39 @@ DEFAULT_MODEL_DIR = os.path.join(os.path.dirname(__file__), "models")
 DEFAULT_KAGGLE_PATH = os.path.join(
     os.path.dirname(__file__), "..", "data", "job_descriptions.csv"
 )
+
+
+def _load_existing_metadata(model_dir: str) -> dict:
+    metadata_path = os.path.join(model_dir, "metadata.json")
+    if not os.path.exists(metadata_path):
+        return {}
+    try:
+        with open(metadata_path, "r") as f:
+            return json.load(f)
+    except Exception as exc:
+        logger.warning("Could not read existing model metadata: %s", exc)
+        return {}
+
+
+def _assert_model_promotion_allowed(args, new_metrics: dict, model_name: str) -> None:
+    """Stop accidental promotion when a new model is clearly worse."""
+    if args.force_promote:
+        return
+
+    existing = _load_existing_metadata(args.model_dir)
+    previous_r2 = existing.get("r2")
+    new_r2 = new_metrics.get(model_name, {}).get("r2")
+    if previous_r2 is None or new_r2 is None:
+        return
+
+    allowed_floor = float(previous_r2) - args.max_r2_drop
+    if float(new_r2) < allowed_floor:
+        print("\n❌ Model promotion blocked.")
+        print(f"   Previous R²: {previous_r2:.3f}")
+        print(f"   New R²:      {new_r2:.3f}")
+        print(f"   Allowed min: {allowed_floor:.3f}")
+        print("   Re-run with --force-promote only if you intentionally want this model.")
+        sys.exit(1)
 
 
 def load_data(args) -> pd.DataFrame:
@@ -154,6 +189,20 @@ def train_pipeline(args) -> None:
     salary_count = df_clean["salary_usd_numeric"].notna().sum()
     logger.info("Rows with salary: %d", salary_count)
 
+    readiness = evaluate_training_readiness(df_clean)
+    print("\n 📊 Scraped-data readiness:")
+    print(f"    Salary rows:     {readiness['salary_rows']:,}")
+    print(f"    Salary coverage: {readiness['salary_coverage_pct']:.1f}%")
+    print(f"    Cities:          {readiness['cities_count']}")
+    print(f"    Seniority lvls:  {readiness['seniority_levels_count']}")
+    print(f"    Top source:      {readiness['top_source']} ({readiness['top_source_pct']:.1f}%)")
+    if readiness["ready_for_scraped_only_training"]:
+        print("    Status:          ready for scraped-only candidate training")
+    else:
+        print("    Status:          keep Kaggle or hybrid training")
+        for reason in readiness["reasons"]:
+            print(f"      - {reason}")
+
     if salary_count < min_rows:
         logger.warning(
             "Only %d rows have salary data (minimum: %d). "
@@ -187,11 +236,20 @@ def train_pipeline(args) -> None:
     # Step 6: Train model
     predictor = SalaryPredictor()
     metrics = predictor.train(X_train, y_train)
+    _assert_model_promotion_allowed(args, metrics, predictor.best_model_name)
 
     # Save model artifacts
     os.makedirs(model_dir, exist_ok=True)
     predictor.save(model_dir)
     feature_engineer.save(model_dir)
+
+    metadata_path = os.path.join(model_dir, "metadata.json")
+    with open(metadata_path, "r") as f:
+        metadata = json.load(f)
+    metadata["training_source"] = source
+    metadata["scraped_data_readiness"] = readiness
+    with open(metadata_path, "w") as f:
+        json.dump(metadata, f, indent=2)
 
     # Step 7: Save cleaned and feature CSVs
     os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -266,6 +324,17 @@ Examples:
         type=int,
         default=500,
         help="Minimum salary rows required (default: 500)",
+    )
+    parser.add_argument(
+        "--max-r2-drop",
+        type=float,
+        default=0.02,
+        help="Maximum allowed R² drop versus existing promoted model (default: 0.02)",
+    )
+    parser.add_argument(
+        "--force-promote",
+        action="store_true",
+        help="Save the new model even if it performs worse than the existing model",
     )
     args = parser.parse_args()
 

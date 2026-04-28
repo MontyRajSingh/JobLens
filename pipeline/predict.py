@@ -79,6 +79,7 @@ def predict_salary(input_dict: Dict, model_dir: str = DEFAULT_MODEL_DIR) -> Dict
     full_row = _build_scraper_format_row(input_dict)
     full_features = _feature_engineer.transform(pd.DataFrame([full_row]))
     result = _predictor.predict_single(full_features.iloc[0].to_dict())
+    model_prediction = int(result.get("predicted_salary_usd", 0))
     
     # 3. Apply Skill Premium Intelligence (The "Value Lock")
     skill_bonuses = []
@@ -105,7 +106,7 @@ def predict_salary(input_dict: Dict, model_dir: str = DEFAULT_MODEL_DIR) -> Dict
     boosted_salary = max(predicted, base_salary + (total_market_premium * 0.5)) 
 
     # 4. Apply Company Tier Prestige (The "Brand Bonus")
-    company_name = input_dict.get("company_name", "").lower()
+    company_name = str(input_dict.get("company_name") or "").lower()
     tier_info = {"tier": 3, "label": "Tier 3: Standard", "bonus": 0}
     
     # Load tier definitions
@@ -120,7 +121,7 @@ def predict_salary(input_dict: Dict, model_dir: str = DEFAULT_MODEL_DIR) -> Dict
             tier_info = {"tier": 2, "label": "Tier 2: Scale", "bonus": 15000}
             
     # 5. Apply Academic Intelligence (Degree Bonus)
-    education = input_dict.get("education_required", "").lower()
+    education = str(input_dict.get("education_required") or "").lower()
     edu_bonus = 0
     edu_label = ""
     
@@ -131,23 +132,38 @@ def predict_salary(input_dict: Dict, model_dir: str = DEFAULT_MODEL_DIR) -> Dict
         edu_bonus = 10000
         edu_label = "Master's Degree Lift"
         
-    # Final Boosted Salary
+    # Final boosted salary. This is a transparent heuristic adjustment layered
+    # on top of the model result, not model-native uncertainty.
     boosted_salary += (tier_info["bonus"] + edu_bonus)
     
     result["predicted_salary_usd"] = int(boosted_salary)
+    result["model_prediction_usd"] = model_prediction
+    result["adjusted_prediction_usd"] = int(boosted_salary)
+    result["base_prediction_usd"] = int(base_salary)
     result["skill_bonuses"] = skill_bonuses
     result["total_skill_premium"] = int(total_market_premium)
     result["company_tier"] = tier_info
     result["academic_bonus"] = {"label": edu_label, "bonus": edu_bonus} if edu_bonus > 0 else None
+    result["adjustments"] = {
+        "skill_market_premium": int(total_market_premium),
+        "skill_applied_premium": int(max(0, boosted_salary - model_prediction - tier_info["bonus"] - edu_bonus)),
+        "company_tier_bonus": int(tier_info["bonus"]),
+        "academic_bonus": int(edu_bonus),
+        "is_heuristic_adjusted": int(boosted_salary) != model_prediction,
+    }
+    result["confidence_method"] = "model_residual_std_before_heuristics"
 
     # Confidence logic
     if not predicted:
         result["predicted_salary_usd"] = int(base_salary + total_market_premium + tier_info["bonus"] + edu_bonus)
+        result["adjusted_prediction_usd"] = result["predicted_salary_usd"]
         result["confidence_low"] = int(result["predicted_salary_usd"] * 0.8)
         result["confidence_high"] = int(result["predicted_salary_usd"] * 1.2)
+        result["confidence_method"] = "fallback_percentage_band"
     else:
         result["confidence_low"] = int(boosted_salary * 0.85)
         result["confidence_high"] = int(boosted_salary * 1.15)
+        result["confidence_method"] = "heuristic_percentage_band_after_adjustments"
 
     return result
 
@@ -164,7 +180,7 @@ def _build_scraper_format_row(input_dict: Dict) -> Dict:
     """
     title = input_dict.get("job_title", "")
     city = input_dict.get("city", "")
-    company = input_dict.get("company_name", "")
+    company = input_dict.get("company_name") or ""
 
     # Skills list → comma-separated string
     skills = input_dict.get("skills", [])
@@ -194,8 +210,8 @@ def _build_scraper_format_row(input_dict: Dict) -> Dict:
         "experience_required": exp_str,
         "employment_type": input_dict.get("employment_type", "Full-time"),
         "remote_type": input_dict.get("remote_type", "On-site"),
-        "industry": input_dict.get("industry"),
-        "education_required": input_dict.get("education_required"),
+        "industry": input_dict.get("industry") or "",
+        "education_required": input_dict.get("education_required") or "",
         "has_equity": 1 if input_dict.get("has_equity") else 0,
         "has_bonus": 1 if input_dict.get("has_bonus") else 0,
         "has_remote_benefits": 1 if input_dict.get("remote_type") in ("Remote", "Hybrid") else 0,

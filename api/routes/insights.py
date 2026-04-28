@@ -139,33 +139,37 @@ async def top_skills(
         sql = f"SELECT skills_required, salary_usd_numeric FROM jobs WHERE {where}"
         rows = db.execute(text(sql), params).fetchall()
 
-        # Count skills and compute salary averages
+        # Count skills and compute salary averages. Premiums are descriptive
+        # cohort-level signals, not causal estimates.
         skill_stats: Dict[str, Dict[str, Any]] = {}
-        all_salaries = []
+        all_salary_rows = []
 
         for row in rows:
             skills_text = row[0] or ""
             salary = row[1]
+            row_skills = {s.strip() for s in skills_text.split(",") if s.strip()}
 
             if salary is not None:
-                all_salaries.append(float(salary))
+                all_salary_rows.append((row_skills, float(salary)))
 
-            for skill in skills_text.split(","):
-                skill = skill.strip()
-                if not skill:
-                    continue
+            for skill in row_skills:
                 if skill not in skill_stats:
                     skill_stats[skill] = {"count": 0, "salaries": []}
                 skill_stats[skill]["count"] += 1
                 if salary is not None:
                     skill_stats[skill]["salaries"].append(float(salary))
 
-        overall_avg = sum(all_salaries) / len(all_salaries) if all_salaries else 0
-
         results = []
         for skill, stats in skill_stats.items():
             avg_with = sum(stats["salaries"]) / len(stats["salaries"]) if stats["salaries"] else None
-            avg_without = overall_avg  # Simplified: overall average as proxy
+            without_salaries = [
+                salary for row_skills, salary in all_salary_rows
+                if skill not in row_skills
+            ]
+            avg_without = (
+                sum(without_salaries) / len(without_salaries)
+                if without_salaries else None
+            )
 
             premium_pct = None
             if avg_with and avg_without and avg_without > 0:
