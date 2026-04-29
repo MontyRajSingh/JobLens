@@ -172,10 +172,10 @@ class FeatureEngineer:
 
         # Fit scaler on numeric columns
         self.numeric_columns = list(numeric_df.columns)
-        self.scaler = StandardScaler()
-        features[self.numeric_columns] = self.scaler.fit_transform(
-            features[self.numeric_columns]
-        )
+        # self.scaler = StandardScaler()
+        # features[self.numeric_columns] = self.scaler.fit_transform(
+        #     features[self.numeric_columns]
+        # )
 
         self.feature_columns = list(features.columns)
         self._fitted = True
@@ -244,9 +244,9 @@ class FeatureEngineer:
         features = features[self.feature_columns]
 
         # Scale numeric columns with saved scaler
-        features[self.numeric_columns] = self.scaler.transform(
-            features[self.numeric_columns]
-        )
+        # features[self.numeric_columns] = self.scaler.transform(
+        #     features[self.numeric_columns]
+        # )
 
         return features
 
