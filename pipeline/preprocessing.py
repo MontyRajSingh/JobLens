@@ -81,6 +81,7 @@ class FeatureEngineer:
         self._top_cities: List[str] = []
         self.skill_columns: List[str] = []
         self.salary_percentiles: Dict[str, float] = {}
+        self.city_target_map: Dict[str, float] = {}
         self.company_rating_mean: float = 3.5  # default fill
         self._fitted = False
 
@@ -138,7 +139,12 @@ class FeatureEngineer:
         features = pd.concat([features, skill_df], axis=1)
         self.skill_columns = list(skill_df.columns)
 
-        # GROUP D — City one-hot (TOP 100 only)
+        # GROUP D — Target Encoding for City
+        city_means = df.groupby("city")["salary_usd_numeric"].mean().to_dict()
+        self.city_target_map = city_means
+        features["city_target_encoded"] = df["city"].map(self.city_target_map).fillna(df["salary_usd_numeric"].mean())
+        
+        # GROUP D2 — City one-hot (TOP 100 only)
         city_counts = df["city"].value_counts()
         self._top_cities = city_counts.head(100).index.tolist()
         self.city_list = self._top_cities  # for backward compat
@@ -197,7 +203,10 @@ class FeatureEngineer:
         skill_df = self._build_skill_features(df)
         features = pd.concat([features, skill_df], axis=1)
 
-        # GROUP D — City one-hot (use saved top cities)
+        # GROUP D — Target Encoding for City
+        features["city_target_encoded"] = df["city"].map(self.city_target_map).fillna(np.mean(list(self.city_target_map.values())) if self.city_target_map else 0)
+
+        # GROUP D2 — City one-hot (use saved top cities)
         city_df = self._build_city_features(df, self._top_cities if self._top_cities else self.city_list)
         features = pd.concat([features, city_df], axis=1)
 
@@ -479,6 +488,7 @@ class FeatureEngineer:
             "top_cities": self._top_cities,
             "numeric_columns": self.numeric_columns,
             "skill_columns": self.skill_columns,
+            "city_target_map": self.city_target_map,
             "salary_percentiles": self.salary_percentiles,
             "company_rating_mean": self.company_rating_mean,
         }
@@ -505,6 +515,7 @@ class FeatureEngineer:
         self._top_cities = state.get("top_cities", state["city_list"])
         self.numeric_columns = state["numeric_columns"]
         self.skill_columns = state.get("skill_columns", [])
+        self.city_target_map = state.get("city_target_map", {})
         self.salary_percentiles = state["salary_percentiles"]
         self.company_rating_mean = state.get("company_rating_mean", 3.5)
 
