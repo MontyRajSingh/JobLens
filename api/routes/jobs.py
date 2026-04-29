@@ -93,8 +93,8 @@ async def search_jobs(
         result = db.execute(text(count_sql), params)
         total = result.scalar() or 0
 
-        # Sorting (Default: Newest First)
-        order_by = "scraped_at DESC NULLS LAST"
+        # Sorting: Jobs with apply links first, then newest first
+        order_by = "CASE WHEN job_link IS NOT NULL AND job_link != '' THEN 0 ELSE 1 END, scraped_at DESC NULLS LAST"
         
         # If searching for salary specifically, or if user requests it (future), 
         # we could change this, but for now: Newest First.
