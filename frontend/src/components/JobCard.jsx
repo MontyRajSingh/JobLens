@@ -132,12 +132,25 @@ export default function JobCard({ job }) {
         </div>
       )}
 
-      <Link
-        to={`/jobs/${job.id}`}
-        className="flex items-center gap-1.5 text-brand-400 text-sm font-medium hover:text-brand-300 transition-colors"
-      >
-        View Details <ExternalLink size={14} />
-      </Link>
+      <div className="flex items-center gap-3">
+        <Link
+          to={`/jobs/${job.id}`}
+          className="flex items-center gap-1.5 text-brand-400 text-sm font-medium hover:text-brand-300 transition-colors"
+        >
+          View Details <ExternalLink size={14} />
+        </Link>
+        {job.job_link && (
+          <a
+            href={job.job_link}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-500 text-black text-sm font-bold uppercase tracking-wider hover:bg-brand-400 transition-colors"
+          >
+            Apply ↗
+          </a>
+        )}
+      </div>
     </div>
   );
 }
