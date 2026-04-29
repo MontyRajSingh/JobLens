@@ -222,7 +222,10 @@ class FeatureEngineer:
         features["title_target_encoded"] = df["job_title"].map(self.title_target_map).fillna(np.mean(list(self.title_target_map.values())) if self.title_target_map else 0)
 
         # GROUP D3 — Target Encoding for Role
-        features["role_target_encoded"] = df["role"].map(self.role_target_map).fillna(np.mean(list(self.role_target_map.values())) if self.role_target_map else 0)
+        if "role" in df.columns:
+            features["role_target_encoded"] = df["role"].map(self.role_target_map).fillna(np.mean(list(self.role_target_map.values())) if self.role_target_map else 0)
+        else:
+            features["role_target_encoded"] = np.mean(list(self.role_target_map.values())) if self.role_target_map else 0
 
         # GROUP D4 — City one-hot (use saved top cities)
         city_df = self._build_city_features(df, self._top_cities if self._top_cities else self.city_list)
