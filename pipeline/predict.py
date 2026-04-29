@@ -64,6 +64,12 @@ def _ensure_loaded(model_dir: str = DEFAULT_MODEL_DIR) -> None:
 def predict_salary(input_dict: Dict, model_dir: str = DEFAULT_MODEL_DIR) -> Dict:
     """
     Predict salary for a single job specification with Skill Premium Intelligence.
+
+    The ML model is trained on a synthetic Kaggle dataset with a narrow salary
+    range ($52K–$102K). To produce realistic, market-calibrated predictions,
+    we layer transparent heuristic adjustments for seniority, experience,
+    city cost-of-living, role type, company tier, and education on top of
+    the model's base signal.
     """
     _ensure_loaded(model_dir)
 
@@ -80,65 +86,215 @@ def predict_salary(input_dict: Dict, model_dir: str = DEFAULT_MODEL_DIR) -> Dict
     full_features = _feature_engineer.transform(pd.DataFrame([full_row]))
     result = _predictor.predict_single(full_features.iloc[0].to_dict())
     model_prediction = int(result.get("predicted_salary_usd", 0))
-    
+
     # 3. Apply Skill Premium Intelligence (The "Value Lock")
     skill_bonuses = []
     total_market_premium = 0
-    
-    # Load calculated premiums
+
     premium_path = os.path.join(model_dir, "skill_premiums.json")
     premiums = {}
     if os.path.exists(premium_path):
         with open(premium_path, "r") as f:
             premiums = json.load(f)
-            
+
     user_skills = input_dict.get("skills", [])
     for skill in user_skills:
-        bonus = premiums.get(skill, 500) # Default small bonus for unknown skills
+        bonus = premiums.get(skill, 500)
         total_market_premium += bonus
         skill_bonuses.append({"skill": skill, "bonus": int(bonus)})
 
-    # Fallback/Sanity Check
     predicted = result.get("predicted_salary_usd", 0)
-    
-    # If AI prediction is lower than Base + Market Premium, we "Premium Boost" it
-    # This prevents the "adding skills lost value" bug
-    boosted_salary = max(predicted, base_salary + (total_market_premium * 0.5)) 
+    boosted_salary = max(predicted, base_salary + (total_market_premium * 0.5))
 
-    # 4. Apply Company Tier Prestige (The "Brand Bonus")
+    # ──────────────────────────────────────────────────────────────
+    # 4. Employment Type Adjustment
+    # Internships and part-time roles pay dramatically less.
+    # This uses a MULTIPLIER on the final salary, not an additive bonus.
+    # ──────────────────────────────────────────────────────────────
+    emp_type = str(input_dict.get("employment_type") or "Full-time")
+    emp_multiplier = 1.0
+    emp_label = "Full-time"
+
+    if "intern" in emp_type.lower():
+        emp_multiplier = 0.45  # Interns earn ~45% of full-time
+        emp_label = "Internship"
+    elif "part" in emp_type.lower():
+        emp_multiplier = 0.55  # Part-time ~55%
+        emp_label = "Part-time"
+    elif "contract" in emp_type.lower():
+        emp_multiplier = 1.05  # Contractors get slight premium (no benefits)
+        emp_label = "Contract"
+
+    # ──────────────────────────────────────────────────────────────
+    # 5. Seniority Adjustment
+    # ──────────────────────────────────────────────────────────────
+    seniority = str(input_dict.get("seniority_level") or "")
+    seniority_bonus = 0
+    seniority_label = ""
+
+    SENIORITY_ADJUSTMENTS = {
+        "Internship":  (-20000, "Internship Level"),
+        "Entry Level": (0,      "Entry Level"),
+        "Associate":   (5000,   "Associate"),
+        "Mid-Level":   (12000,  "Mid-Level Lift"),
+        "Senior":      (30000,  "Senior Premium"),
+        "Staff":       (48000,  "Staff Premium"),
+        "Director":    (60000,  "Director Premium"),
+        "Executive":   (75000,  "Executive Premium"),
+    }
+    for key, (adj, label) in SENIORITY_ADJUSTMENTS.items():
+        if key.lower() in seniority.lower():
+            seniority_bonus = adj
+            seniority_label = label
+            break
+
+    # ──────────────────────────────────────────────────────────────
+    # 6. Experience Adjustment
+    # Steeper early-career growth, flattening after 8 years
+    # (seniority already captures the broad band, this adds nuance)
+    # ──────────────────────────────────────────────────────────────
+    exp_years = input_dict.get("experience_years")
+    exp_bonus = 0
+    if exp_years is not None:
+        exp_years = int(exp_years)
+        if exp_years <= 3:
+            exp_bonus = exp_years * 4500       # $4.5K/yr early career
+        elif exp_years <= 8:
+            exp_bonus = 13500 + (exp_years - 3) * 3500  # $3.5K/yr mid career
+        else:
+            exp_bonus = 31000 + (exp_years - 8) * 2000  # $2K/yr diminishing
+
+    # ──────────────────────────────────────────────────────────────
+    # 7. City / Geography Adjustment
+    # ──────────────────────────────────────────────────────────────
+    city = str(input_dict.get("city") or "").lower()
+    city_bonus = 0
+    city_label = ""
+
+    CITY_ADJUSTMENTS = {
+        # Tier 1: Highest-paying tech hubs
+        "san francisco": (35000, "SF Bay Area Premium"),
+        "new york":      (28000, "NYC Premium"),
+        "seattle":       (25000, "Seattle Tech Hub"),
+        "los angeles":   (18000, "LA Premium"),
+        "boston":         (18000, "Boston Premium"),
+        "washington":    (15000, "DC Metro Premium"),
+        "san jose":      (32000, "Silicon Valley Premium"),
+        "palo alto":     (35000, "Silicon Valley Premium"),
+        # Tier 2: Strong tech markets
+        "austin":        (10000, "Austin Tech Hub"),
+        "denver":        (8000,  "Denver Premium"),
+        "chicago":       (10000, "Chicago Premium"),
+        "atlanta":       (6000,  "Atlanta Premium"),
+        "miami":         (6000,  "Miami Premium"),
+        # International
+        "london":        (20000, "London Premium"),
+        "zurich":        (35000, "Zurich Premium"),
+        "singapore":     (18000, "Singapore Premium"),
+        "tokyo":         (12000, "Tokyo Premium"),
+        "sydney":        (15000, "Sydney Premium"),
+        "toronto":       (10000, "Toronto Premium"),
+        "berlin":        (6000,  "Berlin Premium"),
+        "amsterdam":     (10000, "Amsterdam Premium"),
+        "dublin":        (12000, "Dublin Tech Hub"),
+        "bangalore":     (-15000, "India Market Rate"),
+        "mumbai":        (-12000, "India Market Rate"),
+        "hyderabad":     (-15000, "India Market Rate"),
+    }
+    for city_key, (adj, label) in CITY_ADJUSTMENTS.items():
+        if city_key in city:
+            city_bonus = adj
+            city_label = label
+            break
+
+    # ──────────────────────────────────────────────────────────────
+    # 8. Role-Type Adjustment
+    # ──────────────────────────────────────────────────────────────
+    title = str(input_dict.get("job_title") or "").lower()
+    role_bonus = 0
+    role_label = ""
+
+    if any(kw in title for kw in ["machine learning", " ml ", "ai ", "artificial intelligence"]):
+        role_bonus = 18000
+        role_label = "ML/AI Specialist"
+    elif any(kw in title for kw in ["data scientist", "data science"]):
+        role_bonus = 12000
+        role_label = "Data Science"
+    elif any(kw in title for kw in ["backend", "full stack", "fullstack", "platform"]):
+        role_bonus = 6000
+        role_label = "Engineering"
+    elif any(kw in title for kw in ["frontend", "ui ", "ux "]):
+        role_bonus = 3000
+        role_label = "Frontend/Design"
+    elif any(kw in title for kw in ["devops", "sre", "infrastructure", "cloud"]):
+        role_bonus = 10000
+        role_label = "DevOps/Infra"
+    elif any(kw in title for kw in ["security", "cybersecurity"]):
+        role_bonus = 12000
+        role_label = "Security"
+    elif any(kw in title for kw in ["manager", "director", "vp", "vice president", "head of", "chief"]):
+        role_bonus = 20000
+        role_label = "Leadership"
+    elif any(kw in title for kw in ["qa", "test", "quality"]):
+        role_bonus = -3000
+        role_label = "QA/Testing"
+
+    # ──────────────────────────────────────────────────────────────
+    # 9. Company Tier Prestige (The "Brand Bonus")
+    # ──────────────────────────────────────────────────────────────
     company_name = str(input_dict.get("company_name") or "").lower()
     tier_info = {"tier": 3, "label": "Tier 3: Standard", "bonus": 0}
-    
-    # Load tier definitions
+
     tier_path = os.path.join(model_dir, "company_tiers.json")
     if os.path.exists(tier_path):
         with open(tier_path, "r") as f:
             tiers = json.load(f)
-            
+
         if any(c.lower() in company_name for c in tiers["Tier 1"]["companies"]):
-            tier_info = {"tier": 1, "label": "Tier 1: Prestige", "bonus": 45000}
+            tier_info = {"tier": 1, "label": "Tier 1: Prestige", "bonus": 35000}
         elif any(c.lower() in company_name for c in tiers["Tier 2"]["companies"]):
-            tier_info = {"tier": 2, "label": "Tier 2: Scale", "bonus": 15000}
-            
-    # 5. Apply Academic Intelligence (Degree Bonus)
+            tier_info = {"tier": 2, "label": "Tier 2: Scale", "bonus": 12000}
+
+    # ──────────────────────────────────────────────────────────────
+    # 10. Academic Intelligence (Degree Bonus)
+    # ──────────────────────────────────────────────────────────────
     education = str(input_dict.get("education_required") or "").lower()
     edu_bonus = 0
     edu_label = ""
-    
+
     if "phd" in education or "doctorate" in education:
-        edu_bonus = 25000
+        edu_bonus = 18000
         edu_label = "PhD Specialist Premium"
     elif "master" in education:
-        edu_bonus = 10000
+        edu_bonus = 8000
         edu_label = "Master's Degree Lift"
-        
-    # Final boosted salary. This is a transparent heuristic adjustment layered
-    # on top of the model result, not model-native uncertainty.
-    boosted_salary += (tier_info["bonus"] + edu_bonus)
-    
-    result["predicted_salary_usd"] = int(boosted_salary)
+
+    # ──────────────────────────────────────────────────────────────
+    # 11. Remote work adjustment
+    # ──────────────────────────────────────────────────────────────
+    remote_type = str(input_dict.get("remote_type") or "").lower()
+    remote_bonus = 0
+    if "remote" in remote_type:
+        remote_bonus = -3000
+
+    # ──────────────────────────────────────────────────────────────
+    # FINAL: Combine all additive adjustments, then apply emp multiplier
+    # ──────────────────────────────────────────────────────────────
+    additive_total = (
+        seniority_bonus + exp_bonus + city_bonus +
+        role_bonus + tier_info["bonus"] + edu_bonus +
+        remote_bonus
+    )
+    # Add adjustments to base, then apply employment-type multiplier
+    boosted_salary = (boosted_salary + additive_total) * emp_multiplier
+
+    # Floor: never go below $25K
+    boosted_salary = max(25000, int(boosted_salary))
+
+
+    result["predicted_salary_usd"] = boosted_salary
     result["model_prediction_usd"] = model_prediction
-    result["adjusted_prediction_usd"] = int(boosted_salary)
+    result["adjusted_prediction_usd"] = boosted_salary
     result["base_prediction_usd"] = int(base_salary)
     result["skill_bonuses"] = skill_bonuses
     result["total_skill_premium"] = int(total_market_premium)
@@ -146,16 +302,25 @@ def predict_salary(input_dict: Dict, model_dir: str = DEFAULT_MODEL_DIR) -> Dict
     result["academic_bonus"] = {"label": edu_label, "bonus": edu_bonus} if edu_bonus > 0 else None
     result["adjustments"] = {
         "skill_market_premium": int(total_market_premium),
-        "skill_applied_premium": int(max(0, boosted_salary - model_prediction - tier_info["bonus"] - edu_bonus)),
+        "seniority_adjustment": int(seniority_bonus),
+        "seniority_label": seniority_label,
+        "experience_adjustment": int(exp_bonus),
+        "city_adjustment": int(city_bonus),
+        "city_label": city_label,
+        "role_adjustment": int(role_bonus),
+        "role_label": role_label,
         "company_tier_bonus": int(tier_info["bonus"]),
         "academic_bonus": int(edu_bonus),
-        "is_heuristic_adjusted": int(boosted_salary) != model_prediction,
+        "remote_adjustment": int(remote_bonus),
+        "employment_type": emp_label,
+        "employment_multiplier": emp_multiplier,
+        "is_heuristic_adjusted": True,
     }
-    result["confidence_method"] = "model_residual_std_before_heuristics"
+    result["confidence_method"] = "model_plus_market_heuristics"
 
-    # Confidence logic
+    # Confidence band
     if not predicted:
-        result["predicted_salary_usd"] = int(base_salary + total_market_premium + tier_info["bonus"] + edu_bonus)
+        result["predicted_salary_usd"] = max(25000, int((base_salary + additive_total) * emp_multiplier))
         result["adjusted_prediction_usd"] = result["predicted_salary_usd"]
         result["confidence_low"] = int(result["predicted_salary_usd"] * 0.8)
         result["confidence_high"] = int(result["predicted_salary_usd"] * 1.2)
@@ -163,7 +328,6 @@ def predict_salary(input_dict: Dict, model_dir: str = DEFAULT_MODEL_DIR) -> Dict
     else:
         result["confidence_low"] = int(boosted_salary * 0.85)
         result["confidence_high"] = int(boosted_salary * 1.15)
-        result["confidence_method"] = "heuristic_percentage_band_after_adjustments"
 
     return result
 
@@ -200,6 +364,7 @@ def _build_scraper_format_row(input_dict: Dict) -> Dict:
 
     row = {
         "job_title": title,
+        "role": input_dict.get("role", title),  # fallback to job_title
         "company_name": company,
         "city": city,
         "location": city,
