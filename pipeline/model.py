@@ -26,6 +26,7 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.ensemble import RandomForestRegressor
 import xgboost as xgb
 import lightgbm as lgb
+from catboost import CatBoostRegressor
 
 logger = logging.getLogger(__name__)
 
@@ -163,7 +164,25 @@ class SalaryPredictor:
         self.metrics["LightGBM"] = {"rmse": lgb_rmse, "mae": lgb_mae, "r2": lgb_r2}
         logger.info("LightGBM — RMSE: $%s | MAE: $%s | R²: %.3f", f"{lgb_rmse:,.0f}", f"{lgb_mae:,.0f}", lgb_r2)
 
-        # Step 6: Select best model
+        # Step 6: Train CatBoost
+        logger.info("Training CatBoost...")
+        cb_model = CatBoostRegressor(
+            iterations=500,
+            learning_rate=0.05,
+            depth=6,
+            random_seed=42,
+            verbose=0,
+            thread_count=-1
+        )
+        cb_model.fit(X_train, y_train)
+        cb_pred = cb_model.predict(X_test)
+        cb_rmse = float(np.sqrt(mean_squared_error(y_test, cb_pred)))
+        cb_mae = float(mean_absolute_error(y_test, cb_pred))
+        cb_r2 = float(r2_score(y_test, cb_pred))
+        self.metrics["CatBoost"] = {"rmse": cb_rmse, "mae": cb_mae, "r2": cb_r2}
+        logger.info("CatBoost — RMSE: $%s | MAE: $%s | R²: %.3f", f"{cb_rmse:,.0f}", f"{cb_mae:,.0f}", cb_r2)
+
+        # Step 7: Select best model
         best_name = max(self.metrics, key=lambda k: self.metrics[k]["r2"])
         self.best_model_name = best_name
         
@@ -173,6 +192,9 @@ class SalaryPredictor:
         elif best_name == "LightGBM":
             self.best_model = lgb_model
             best_pred = lgb_pred
+        elif best_name == "CatBoost":
+            self.best_model = cb_model
+            best_pred = cb_pred
         else:
             self.best_model = rf_model
             best_pred = rf_pred
