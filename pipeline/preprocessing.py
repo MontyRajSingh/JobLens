@@ -81,6 +81,9 @@ class FeatureEngineer:
         self._top_cities: List[str] = []
         self.skill_columns: List[str] = []
         self.salary_percentiles: Dict[str, float] = {}
+        self.city_target_map: Dict[str, float] = {}
+        self.title_target_map: Dict[str, float] = {}
+        self.role_target_map: Dict[str, float] = {}
         self.company_rating_mean: float = 3.5  # default fill
         self._fitted = False
 
@@ -138,9 +141,24 @@ class FeatureEngineer:
         features = pd.concat([features, skill_df], axis=1)
         self.skill_columns = list(skill_df.columns)
 
-        # GROUP D — City one-hot (TOP 20 only)
+        # GROUP D — Target Encoding for City
+        city_means = df.groupby("city")["salary_usd_numeric"].mean().to_dict()
+        self.city_target_map = city_means
+        features["city_target_encoded"] = df["city"].map(self.city_target_map).fillna(df["salary_usd_numeric"].mean())
+        
+        # GROUP D2 — Target Encoding for Title
+        title_means = df.groupby("job_title")["salary_usd_numeric"].mean().to_dict()
+        self.title_target_map = title_means
+        features["title_target_encoded"] = df["job_title"].map(self.title_target_map).fillna(df["salary_usd_numeric"].mean())
+        
+        # GROUP D3 — Target Encoding for Role
+        role_means = df.groupby("role")["salary_usd_numeric"].mean().to_dict() if "role" in df.columns else {}
+        self.role_target_map = role_means
+        features["role_target_encoded"] = df["role"].map(self.role_target_map).fillna(df["salary_usd_numeric"].mean())
+
+        # GROUP D4 — City one-hot (TOP 100 only)
         city_counts = df["city"].value_counts()
-        self._top_cities = city_counts.head(20).index.tolist()
+        self._top_cities = city_counts.head(100).index.tolist()
         self.city_list = self._top_cities  # for backward compat
         city_df = self._build_city_features(df, self._top_cities)
         features = pd.concat([features, city_df], axis=1)
@@ -154,10 +172,10 @@ class FeatureEngineer:
 
         # Fit scaler on numeric columns
         self.numeric_columns = list(numeric_df.columns)
-        self.scaler = StandardScaler()
-        features[self.numeric_columns] = self.scaler.fit_transform(
-            features[self.numeric_columns]
-        )
+        # self.scaler = StandardScaler()
+        # features[self.numeric_columns] = self.scaler.fit_transform(
+        #     features[self.numeric_columns]
+        # )
 
         self.feature_columns = list(features.columns)
         self._fitted = True
@@ -197,7 +215,19 @@ class FeatureEngineer:
         skill_df = self._build_skill_features(df)
         features = pd.concat([features, skill_df], axis=1)
 
-        # GROUP D — City one-hot (use saved top cities)
+        # GROUP D — Target Encoding for City
+        features["city_target_encoded"] = df["city"].map(self.city_target_map).fillna(np.mean(list(self.city_target_map.values())) if self.city_target_map else 0)
+
+        # GROUP D2 — Target Encoding for Title
+        features["title_target_encoded"] = df["job_title"].map(self.title_target_map).fillna(np.mean(list(self.title_target_map.values())) if self.title_target_map else 0)
+
+        # GROUP D3 — Target Encoding for Role
+        if "role" in df.columns:
+            features["role_target_encoded"] = df["role"].map(self.role_target_map).fillna(np.mean(list(self.role_target_map.values())) if self.role_target_map else 0)
+        else:
+            features["role_target_encoded"] = np.mean(list(self.role_target_map.values())) if self.role_target_map else 0
+
+        # GROUP D4 — City one-hot (use saved top cities)
         city_df = self._build_city_features(df, self._top_cities if self._top_cities else self.city_list)
         features = pd.concat([features, city_df], axis=1)
 
@@ -217,9 +247,9 @@ class FeatureEngineer:
         features = features[self.feature_columns]
 
         # Scale numeric columns with saved scaler
-        features[self.numeric_columns] = self.scaler.transform(
-            features[self.numeric_columns]
-        )
+        # features[self.numeric_columns] = self.scaler.transform(
+        #     features[self.numeric_columns]
+        # )
 
         return features
 
@@ -269,6 +299,11 @@ class FeatureEngineer:
             ),
             axis=1,
         ).astype(int)
+
+        # INTERACTION: experience * seniority
+        nf["exp_seniority_interaction"] = nf["experience_midpoint"] * nf["seniority_score"]
+        # Fill NaN if experience was missing
+        nf["exp_seniority_interaction"] = nf["exp_seniority_interaction"].fillna(0)
 
         # company_rating
         if "company_rating" in df.columns:
@@ -374,6 +409,29 @@ class FeatureEngineer:
         bf["is_ml_role"] = title_lower.str.contains("machine learning|\\bml\\b|\\bai\\b").astype(int)
         bf["is_ds_role"] = title_lower.str.contains("data scien").astype(int)
         bf["is_sde_role"] = title_lower.str.contains("software engineer|\\bsde\\b|developer").astype(int)
+        
+        # High-level Seniority Flags
+        bf["is_staff_principal"] = title_lower.str.contains("staff|principal|fellow|distinguished").astype(int)
+        bf["is_manager_vp"] = title_lower.str.contains("manager|director|vp|vice president|head of|chief").astype(int)
+
+        # DOMAIN SPECIALIZATION (Clustered Skills)
+        skills_lower = df["skills_required"].fillna("").str.lower()
+        
+        # Cloud/DevOps
+        cloud_keywords = ["aws", "gcp", "azure", "docker", "kubernetes", "terraform", "devops", "ci/cd", "cloud"]
+        bf["is_cloud_expert"] = skills_lower.apply(lambda x: 1 if any(k in x for k in cloud_keywords) else 0)
+        
+        # Data/AI/ML
+        ai_keywords = ["machine learning", "deep learning", "nlp", "llm", "genai", "pytorch", "tensorflow", "data science", "ai"]
+        bf["is_ai_expert"] = skills_lower.apply(lambda x: 1 if any(k in x for k in ai_keywords) else 0)
+        
+        # Data Engineering/Backend
+        backend_keywords = ["sql", "postgresql", "mongodb", "redis", "kafka", "spark", "hadoop", "data engineering", "backend"]
+        bf["is_backend_expert"] = skills_lower.apply(lambda x: 1 if any(k in x for k in backend_keywords) else 0)
+        
+        # Frontend/Web
+        web_keywords = ["react", "angular", "vue", "javascript", "typescript", "frontend", "web", "node.js"]
+        bf["is_web_expert"] = skills_lower.apply(lambda x: 1 if any(k in x for k in web_keywords) else 0)
 
         return bf
 
@@ -455,6 +513,9 @@ class FeatureEngineer:
             "top_cities": self._top_cities,
             "numeric_columns": self.numeric_columns,
             "skill_columns": self.skill_columns,
+            "city_target_map": self.city_target_map,
+            "title_target_map": self.title_target_map,
+            "role_target_map": self.role_target_map,
             "salary_percentiles": self.salary_percentiles,
             "company_rating_mean": self.company_rating_mean,
         }
@@ -481,6 +542,9 @@ class FeatureEngineer:
         self._top_cities = state.get("top_cities", state["city_list"])
         self.numeric_columns = state["numeric_columns"]
         self.skill_columns = state.get("skill_columns", [])
+        self.city_target_map = state.get("city_target_map", {})
+        self.title_target_map = state.get("title_target_map", {})
+        self.role_target_map = state.get("role_target_map", {})
         self.salary_percentiles = state["salary_percentiles"]
         self.company_rating_mean = state.get("company_rating_mean", 3.5)
 
