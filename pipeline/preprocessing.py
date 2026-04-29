@@ -138,9 +138,9 @@ class FeatureEngineer:
         features = pd.concat([features, skill_df], axis=1)
         self.skill_columns = list(skill_df.columns)
 
-        # GROUP D — City one-hot (TOP 20 only)
+        # GROUP D — City one-hot (TOP 100 only)
         city_counts = df["city"].value_counts()
-        self._top_cities = city_counts.head(20).index.tolist()
+        self._top_cities = city_counts.head(100).index.tolist()
         self.city_list = self._top_cities  # for backward compat
         city_df = self._build_city_features(df, self._top_cities)
         features = pd.concat([features, city_df], axis=1)
@@ -269,6 +269,11 @@ class FeatureEngineer:
             ),
             axis=1,
         ).astype(int)
+
+        # INTERACTION: experience * seniority
+        nf["exp_seniority_interaction"] = nf["experience_midpoint"] * nf["seniority_score"]
+        # Fill NaN if experience was missing
+        nf["exp_seniority_interaction"] = nf["exp_seniority_interaction"].fillna(0)
 
         # company_rating
         if "company_rating" in df.columns:
