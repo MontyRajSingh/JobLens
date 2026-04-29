@@ -22,6 +22,7 @@ import sys
 import argparse
 import logging
 import json
+import csv
 
 import pandas as pd
 
@@ -161,6 +162,45 @@ def load_data(args) -> pd.DataFrame:
         return df
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# AUTORESEARCH: Experiment logger
+# Logs every training run to results.csv for the agent to track progress.
+# ─────────────────────────────────────────────────────────────────────────────
+def _log_experiment(model_name: str, metrics: dict, rows: int, features: int) -> None:
+    """Append this experiment's results to results.csv."""
+    results_path = os.path.join(os.path.dirname(__file__), "..", "results.csv")
+
+    # Read next experiment ID
+    experiment_id = 1
+    if os.path.exists(results_path):
+        try:
+            existing = pd.read_csv(results_path)
+            if not existing.empty:
+                experiment_id = int(existing["experiment_id"].max()) + 1
+        except Exception:
+            pass
+
+    row = {
+        "experiment_id": experiment_id,
+        "model_name":    model_name,
+        "rmse":          round(metrics.get("rmse", 0), 2),
+        "mae":           round(metrics.get("mae", 0), 2),
+        "r2":            round(metrics.get("r2", 0), 4),
+        "rows":          rows,
+        "features":      features,
+        "change_made":   "see git diff",   # agent should update this description
+    }
+
+    file_exists = os.path.exists(results_path)
+    with open(results_path, "a", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=row.keys())
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow(row)
+
+    logger.info("Experiment #%d logged to results.csv", experiment_id)
+
+
 def train_pipeline(args) -> None:
     """
     Execute the full training pipeline.
@@ -264,19 +304,38 @@ def train_pipeline(args) -> None:
 
     # Final summary
     best_metrics = metrics.get(predictor.best_model_name, {})
+    val_r2   = best_metrics.get("r2", 0)
+    val_rmse = best_metrics.get("rmse", 0)
+    val_mae  = best_metrics.get("mae", 0)
+
     print(f"\n{'='*70}")
     print(f" ✅ TRAINING COMPLETE")
     print(f"{'='*70}")
     print(f" Model:    {predictor.best_model_name}")
-    print(f" RMSE:     ${best_metrics.get('rmse', 0):,.0f}")
-    print(f" MAE:      ${best_metrics.get('mae', 0):,.0f}")
-    print(f" R²:       {best_metrics.get('r2', 0):.3f}")
+    print(f" RMSE:     ${val_rmse:,.0f}")
+    print(f" MAE:      ${val_mae:,.0f}")
+    print(f" R²:       {val_r2:.3f}")
     print(f" Features: {len(feature_engineer.feature_columns)}")
     print(f" Rows:     {len(X_train)}")
     print(f"\n 📁 Artifacts saved to: {model_dir}")
     print(f" 📁 Cleaned CSV:        {cleaned_path}")
     print(f" 📁 Features CSV:       {features_path}")
     print(f"{'='*70}\n")
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # AUTORESEARCH: Print metric in standard format + log experiment
+    # The agent reads these lines to decide keep/revert.
+    # val_metric uses R² (higher is better).
+    # ─────────────────────────────────────────────────────────────────────────
+    print(f"val_metric: {val_r2:.4f}")   # agent reads this line — do not remove
+    print(f"val_rmse:   {val_rmse:.2f}") # agent reads this line — do not remove
+
+    _log_experiment(
+        model_name=predictor.best_model_name,
+        metrics=best_metrics,
+        rows=len(X_train),
+        features=len(feature_engineer.feature_columns),
+    )
 
 
 def main():
