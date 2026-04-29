@@ -25,6 +25,7 @@ from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.ensemble import RandomForestRegressor
 import xgboost as xgb
+import lightgbm as lgb
 
 logger = logging.getLogger(__name__)
 
@@ -144,13 +145,35 @@ class SalaryPredictor:
         self.metrics["XGBoost"] = {"rmse": xgb_rmse, "mae": xgb_mae, "r2": xgb_r2}
         logger.info("XGBoost (Best Params: %s) — RMSE: $%s | MAE: $%s | R²: %.3f", grid_search.best_params_, f"{xgb_rmse:,.0f}", f"{xgb_mae:,.0f}", xgb_r2)
 
-        # Step 5: Select best model
-        if xgb_r2 > rf_r2:
-            self.best_model_name = "XGBoost"
+        # Step 5: Train LightGBM
+        logger.info("Training LightGBM...")
+        lgb_model = lgb.LGBMRegressor(
+            n_estimators=500,
+            learning_rate=0.05,
+            num_leaves=31,
+            random_state=42,
+            n_jobs=-1,
+            verbose=-1
+        )
+        lgb_model.fit(X_train, y_train)
+        lgb_pred = lgb_model.predict(X_test)
+        lgb_rmse = float(np.sqrt(mean_squared_error(y_test, lgb_pred)))
+        lgb_mae = float(mean_absolute_error(y_test, lgb_pred))
+        lgb_r2 = float(r2_score(y_test, lgb_pred))
+        self.metrics["LightGBM"] = {"rmse": lgb_rmse, "mae": lgb_mae, "r2": lgb_r2}
+        logger.info("LightGBM — RMSE: $%s | MAE: $%s | R²: %.3f", f"{lgb_rmse:,.0f}", f"{lgb_mae:,.0f}", lgb_r2)
+
+        # Step 6: Select best model
+        best_name = max(self.metrics, key=lambda k: self.metrics[k]["r2"])
+        self.best_model_name = best_name
+        
+        if best_name == "XGBoost":
             self.best_model = xgb_model
             best_pred = xgb_pred
+        elif best_name == "LightGBM":
+            self.best_model = lgb_model
+            best_pred = lgb_pred
         else:
-            self.best_model_name = "Random Forest"
             self.best_model = rf_model
             best_pred = rf_pred
             
