@@ -121,10 +121,10 @@ class SalaryPredictor:
         # Step 4: Train XGBoost with GridSearchCV
         logger.info("Training XGBoost with GridSearchCV...")
         xgb_param_grid = {
-            'n_estimators': [100, 300],
-            'max_depth': [4, 6, 8],
-            'learning_rate': [0.05, 0.1],
-            'subsample': [0.8, 1.0]
+            'n_estimators': [500, 800],
+            'max_depth': [10, 12],
+            'learning_rate': [0.03, 0.05],
+            'subsample': [0.8, 0.9]
         }
         xgb_base = xgb.XGBRegressor(random_state=42, n_jobs=-1)
         grid_search = GridSearchCV(
