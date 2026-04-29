@@ -380,6 +380,25 @@ class FeatureEngineer:
         bf["is_ds_role"] = title_lower.str.contains("data scien").astype(int)
         bf["is_sde_role"] = title_lower.str.contains("software engineer|\\bsde\\b|developer").astype(int)
 
+        # DOMAIN SPECIALIZATION (Clustered Skills)
+        skills_lower = df["skills_required"].fillna("").str.lower()
+        
+        # Cloud/DevOps
+        cloud_keywords = ["aws", "gcp", "azure", "docker", "kubernetes", "terraform", "devops", "ci/cd", "cloud"]
+        bf["is_cloud_expert"] = skills_lower.apply(lambda x: 1 if any(k in x for k in cloud_keywords) else 0)
+        
+        # Data/AI/ML
+        ai_keywords = ["machine learning", "deep learning", "nlp", "llm", "genai", "pytorch", "tensorflow", "data science", "ai"]
+        bf["is_ai_expert"] = skills_lower.apply(lambda x: 1 if any(k in x for k in ai_keywords) else 0)
+        
+        # Data Engineering/Backend
+        backend_keywords = ["sql", "postgresql", "mongodb", "redis", "kafka", "spark", "hadoop", "data engineering", "backend"]
+        bf["is_backend_expert"] = skills_lower.apply(lambda x: 1 if any(k in x for k in backend_keywords) else 0)
+        
+        # Frontend/Web
+        web_keywords = ["react", "angular", "vue", "javascript", "typescript", "frontend", "web", "node.js"]
+        bf["is_web_expert"] = skills_lower.apply(lambda x: 1 if any(k in x for k in web_keywords) else 0)
+
         return bf
 
     # ──────────────────────────────────────────────
