@@ -388,6 +388,10 @@ class FeatureEngineer:
         bf["is_ml_role"] = title_lower.str.contains("machine learning|\\bml\\b|\\bai\\b").astype(int)
         bf["is_ds_role"] = title_lower.str.contains("data scien").astype(int)
         bf["is_sde_role"] = title_lower.str.contains("software engineer|\\bsde\\b|developer").astype(int)
+        
+        # High-level Seniority Flags
+        bf["is_staff_principal"] = title_lower.str.contains("staff|principal|fellow|distinguished").astype(int)
+        bf["is_manager_vp"] = title_lower.str.contains("manager|director|vp|vice president|head of|chief").astype(int)
 
         # DOMAIN SPECIALIZATION (Clustered Skills)
         skills_lower = df["skills_required"].fillna("").str.lower()
