@@ -134,13 +134,13 @@ def predict_salary(input_dict: Dict, model_dir: str = DEFAULT_MODEL_DIR) -> Dict
 
     SENIORITY_ADJUSTMENTS = {
         "Internship":  (-20000, "Internship Level"),
-        "Entry Level": (-5000,  "Entry Level"),
-        "Associate":   (0,      "Associate"),
-        "Mid-Level":   (5000,   "Mid-Level Lift"),
-        "Senior":      (20000,  "Senior Premium"),
-        "Staff":       (35000,  "Staff Premium"),
-        "Director":    (45000,  "Director Premium"),
-        "Executive":   (55000,  "Executive Premium"),
+        "Entry Level": (0,      "Entry Level"),
+        "Associate":   (5000,   "Associate"),
+        "Mid-Level":   (12000,  "Mid-Level Lift"),
+        "Senior":      (30000,  "Senior Premium"),
+        "Staff":       (48000,  "Staff Premium"),
+        "Director":    (60000,  "Director Premium"),
+        "Executive":   (75000,  "Executive Premium"),
     }
     for key, (adj, label) in SENIORITY_ADJUSTMENTS.items():
         if key.lower() in seniority.lower():
@@ -158,11 +158,11 @@ def predict_salary(input_dict: Dict, model_dir: str = DEFAULT_MODEL_DIR) -> Dict
     if exp_years is not None:
         exp_years = int(exp_years)
         if exp_years <= 3:
-            exp_bonus = exp_years * 3500       # $3.5K/yr early career
+            exp_bonus = exp_years * 4500       # $4.5K/yr early career
         elif exp_years <= 8:
-            exp_bonus = 10500 + (exp_years - 3) * 3000  # $3K/yr mid career
+            exp_bonus = 13500 + (exp_years - 3) * 3500  # $3.5K/yr mid career
         else:
-            exp_bonus = 25500 + (exp_years - 8) * 1500  # $1.5K/yr diminishing
+            exp_bonus = 31000 + (exp_years - 8) * 2000  # $2K/yr diminishing
 
     # ──────────────────────────────────────────────────────────────
     # 7. City / Geography Adjustment
@@ -173,33 +173,33 @@ def predict_salary(input_dict: Dict, model_dir: str = DEFAULT_MODEL_DIR) -> Dict
 
     CITY_ADJUSTMENTS = {
         # Tier 1: Highest-paying tech hubs
-        "san francisco": (25000, "SF Bay Area Premium"),
-        "new york":      (20000, "NYC Premium"),
-        "seattle":       (18000, "Seattle Tech Hub"),
-        "los angeles":   (12000, "LA Premium"),
-        "boston":         (12000, "Boston Premium"),
-        "washington":    (10000, "DC Metro Premium"),
-        "san jose":      (23000, "Silicon Valley Premium"),
-        "palo alto":     (25000, "Silicon Valley Premium"),
+        "san francisco": (35000, "SF Bay Area Premium"),
+        "new york":      (28000, "NYC Premium"),
+        "seattle":       (25000, "Seattle Tech Hub"),
+        "los angeles":   (18000, "LA Premium"),
+        "boston":         (18000, "Boston Premium"),
+        "washington":    (15000, "DC Metro Premium"),
+        "san jose":      (32000, "Silicon Valley Premium"),
+        "palo alto":     (35000, "Silicon Valley Premium"),
         # Tier 2: Strong tech markets
-        "austin":        (6000,  "Austin Tech Hub"),
-        "denver":        (5000,  "Denver Premium"),
-        "chicago":       (6000,  "Chicago Premium"),
-        "atlanta":       (4000,  "Atlanta Premium"),
-        "miami":         (4000,  "Miami Premium"),
+        "austin":        (10000, "Austin Tech Hub"),
+        "denver":        (8000,  "Denver Premium"),
+        "chicago":       (10000, "Chicago Premium"),
+        "atlanta":       (6000,  "Atlanta Premium"),
+        "miami":         (6000,  "Miami Premium"),
         # International
-        "london":        (15000, "London Premium"),
-        "zurich":        (28000, "Zurich Premium"),
-        "singapore":     (12000, "Singapore Premium"),
-        "tokyo":         (8000,  "Tokyo Premium"),
-        "sydney":        (10000, "Sydney Premium"),
-        "toronto":       (6000,  "Toronto Premium"),
-        "berlin":        (4000,  "Berlin Premium"),
-        "amsterdam":     (6000,  "Amsterdam Premium"),
-        "dublin":        (8000,  "Dublin Tech Hub"),
-        "bangalore":     (-20000, "India Market Rate"),
-        "mumbai":        (-18000, "India Market Rate"),
-        "hyderabad":     (-20000, "India Market Rate"),
+        "london":        (20000, "London Premium"),
+        "zurich":        (35000, "Zurich Premium"),
+        "singapore":     (18000, "Singapore Premium"),
+        "tokyo":         (12000, "Tokyo Premium"),
+        "sydney":        (15000, "Sydney Premium"),
+        "toronto":       (10000, "Toronto Premium"),
+        "berlin":        (6000,  "Berlin Premium"),
+        "amsterdam":     (10000, "Amsterdam Premium"),
+        "dublin":        (12000, "Dublin Tech Hub"),
+        "bangalore":     (-15000, "India Market Rate"),
+        "mumbai":        (-12000, "India Market Rate"),
+        "hyderabad":     (-15000, "India Market Rate"),
     }
     for city_key, (adj, label) in CITY_ADJUSTMENTS.items():
         if city_key in city:
@@ -215,28 +215,28 @@ def predict_salary(input_dict: Dict, model_dir: str = DEFAULT_MODEL_DIR) -> Dict
     role_label = ""
 
     if any(kw in title for kw in ["machine learning", " ml ", "ai ", "artificial intelligence"]):
-        role_bonus = 12000
+        role_bonus = 18000
         role_label = "ML/AI Specialist"
     elif any(kw in title for kw in ["data scientist", "data science"]):
-        role_bonus = 8000
+        role_bonus = 12000
         role_label = "Data Science"
     elif any(kw in title for kw in ["backend", "full stack", "fullstack", "platform"]):
-        role_bonus = 4000
+        role_bonus = 6000
         role_label = "Engineering"
     elif any(kw in title for kw in ["frontend", "ui ", "ux "]):
-        role_bonus = 2000
+        role_bonus = 3000
         role_label = "Frontend/Design"
     elif any(kw in title for kw in ["devops", "sre", "infrastructure", "cloud"]):
-        role_bonus = 6000
+        role_bonus = 10000
         role_label = "DevOps/Infra"
     elif any(kw in title for kw in ["security", "cybersecurity"]):
-        role_bonus = 8000
+        role_bonus = 12000
         role_label = "Security"
     elif any(kw in title for kw in ["manager", "director", "vp", "vice president", "head of", "chief"]):
-        role_bonus = 15000
+        role_bonus = 20000
         role_label = "Leadership"
     elif any(kw in title for kw in ["qa", "test", "quality"]):
-        role_bonus = -5000
+        role_bonus = -3000
         role_label = "QA/Testing"
 
     # ──────────────────────────────────────────────────────────────
