@@ -40,3 +40,10 @@ __pycache__/
 # Graphify exclusions
 graphify-out/
 .graphify_*
+
+# Autoresearch / scratch
+scratch/
+results.csv
+run.log
+catboost_info/
+debug_dumps/
