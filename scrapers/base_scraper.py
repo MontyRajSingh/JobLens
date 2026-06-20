@@ -102,29 +102,82 @@ class BaseScraper(ABC):
                 job[col] = None
         return job
 
+    # Fields shown in the terminal report
+    REPORT_FIELDS = [
+        "job_title", "company_name", "location", "salary",
+        "seniority_level", "employment_type", "remote_type",
+        "skills_required", "experience_required", "job_link", "date_posted_raw",
+    ]
+
     def validate_batch(self, jobs: List[Dict]) -> List[Dict]:
         """
-        Validate and normalise a batch of job dicts.
-
-        Applies validate_job_record() to every job and filters out records
-        with a missing job_title (indicates a failed scrape).
-
-        Args:
-            jobs: List of raw job dicts.
-
-        Returns:
-            List of normalised, valid job dicts.
+        Validate a batch, deduplicate by dedup_key, and print a terminal report.
         """
+        # Validate + filter missing titles
         validated = []
+        seen_dedup: set = set()
         for job in jobs:
             job = self.validate_job_record(job)
-            if job.get("job_title"):
-                validated.append(job)
-            else:
-                self.logger.warning(
-                    "Dropping job with missing title: %s", job.get("job_link")
-                )
-        self.logger.info(
-            "Batch validation: %d/%d jobs passed", len(validated), len(jobs)
-        )
+            if not job.get("job_title"):
+                self.logger.warning("Dropping job with missing title: %s", job.get("job_link"))
+                continue
+            # Within-batch dedup
+            dk = job.get("dedup_key")
+            if dk and dk in seen_dedup:
+                self.logger.debug("Deduplicating: %s @ %s", job.get("job_title"), job.get("company_name"))
+                continue
+            if dk:
+                seen_dedup.add(dk)
+            validated.append(job)
+
+        self._print_report(validated)
         return validated
+
+    def _print_report(self, jobs: List[Dict]) -> None:
+        """Print a human-readable scrape report to the terminal."""
+        source = getattr(self, "SOURCE", self.__class__.__name__)
+        total  = len(jobs)
+
+        # Field fill counts
+        fill: Dict[str, int] = {f: 0 for f in self.REPORT_FIELDS}
+        for job in jobs:
+            for f in self.REPORT_FIELDS:
+                if job.get(f) is not None:
+                    fill[f] += 1
+
+        # ── Header
+        print(f"\n{'─'*58}")
+        print(f"  📋  {source} — Scrape Report  ({total} jobs)")
+        print(f"{'─'*58}")
+
+        if total == 0:
+            print("  ⚠️  No jobs collected.\n")
+            return
+
+        # ── Per-job summary
+        for i, job in enumerate(jobs, 1):
+            title   = (job.get("job_title")    or "?")[:45]
+            company = (job.get("company_name") or "?")[:30]
+            salary  = job.get("salary") or "—"
+            print(f"  {i:2}. {title}")
+            print(f"      @ {company}  |  {salary}")
+
+        # ── Field coverage table
+        print(f"\n  {'Field':<22} {'Filled':>6}  {'%':>5}  Status")
+        print(f"  {'─'*50}")
+        for field in self.REPORT_FIELDS:
+            count = fill[field]
+            pct   = (count / total * 100) if total else 0
+            icon  = "✅" if pct == 100 else ("⚠️ " if pct > 0 else "❌")
+            print(f"  {field:<22} {count:>6}/{total:<4} {pct:>4.0f}%  {icon}")
+
+        # ── Missing fields summary
+        missing = [f for f in self.REPORT_FIELDS if fill[f] == 0]
+        partial = [f for f in self.REPORT_FIELDS if 0 < fill[f] < total]
+        if missing:
+            print(f"\n  ❌ Fully missing:  {', '.join(missing)}")
+        if partial:
+            print(f"  ⚠️  Partially filled: {', '.join(partial)}")
+        if not missing and not partial:
+            print(f"\n  ✅ All fields fully populated!")
+        print(f"{'─'*58}\n")

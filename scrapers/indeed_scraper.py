@@ -3,98 +3,46 @@ scrapers/indeed_scraper.py
 ---------------------------
 Indeed job scraper. Inherits BaseScraper.
 
-Paginates through up to 3 pages of search results per query.
-Handles CAPTCHA detection, consent-modal dismissal, and country-specific
-domains mapped by currency code from config.py.
-
-Indeed is the best source for employment_type and date_posted_raw
-since it shows those on both the card and the detail page.
-Salary fill rate is lower than LinkedIn for US jobs but higher for UK (£).
-
-Imports all utilities from utils/ and constants from config.py.
-No logic is duplicated here.
+Uses Scrapling's StealthyFetcher to bypass Indeed's aggressive anti-bot
+systems (CAPTCHAs, Cloudflare Turnstile).
 """
 
 import re
 import time
 import random
 import hashlib
-import logging
 from typing import Dict, List, Optional
 from urllib.parse import quote_plus, urljoin
 
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import (
-    TimeoutException,
-    NoSuchElementException,
-)
+from scrapling.fetchers import StealthyFetcher
 
 from scrapers.base_scraper import BaseScraper
-from utils.driver_utils import setup_driver
 from utils.text_utils import (
-    clean_text,
-    extract_experience,
-    extract_skills,
-    infer_seniority,
-    parse_indeed_metadata,
-    is_faang,
-    seniority_to_experience,
+    clean_text, extract_experience, extract_skills,
+    infer_seniority, parse_indeed_metadata,
+    is_faang, seniority_to_experience,
 )
 from utils.salary_utils import extract_salary_from_text
 from config import INDEED_DOMAINS, COL_INDEX, MAX_JOBS_PER_SEARCH
 
 
 class IndeedScraper(BaseScraper):
-    """
-    Indeed job scraper.
-
-    Paginates through search results (up to MAX_PAGES), collects job cards,
-    then visits each detail page for full description and salary extraction.
-    Uses self.logger (from BaseScraper.__init__) for named log output.
-    """
-
-    SOURCE   = "Indeed"
-    MAX_PAGES = 3           # 15 jobs/page × 3 pages = up to 45 per query
+    SOURCE    = "Indeed"
+    MAX_PAGES = 3
 
     def __init__(self):
-        super().__init__()  # initialises self.logger
+        super().__init__()
 
-    # ── Public interface ───────────────────────────────────────────────────────
-    def scrape(
-        self,
-        keyword: str,
-        location: str,
-        currency: str = "USD",
-        usd_rate: float = 1.0,
-        max_jobs: int = None,
-    ) -> List[Dict]:
-        """
-        Scrape Indeed jobs for a keyword/location combination.
-
-        Args:
-            keyword:   Job search keyword e.g. "data scientist"
-            location:  Location string e.g. "New York, NY"
-            currency:  Currency code — used to select the correct Indeed domain
-            usd_rate:  Conversion rate to USD
-            max_jobs:  Max jobs to collect (defaults to MAX_JOBS_PER_SEARCH)
-
-        Returns:
-            List of validated job dicts matching BaseScraper.REQUIRED_COLUMNS
-        """
+    def scrape(self, keyword, location, currency="USD", usd_rate=1.0, max_jobs=None):
         if max_jobs is None:
             max_jobs = MAX_JOBS_PER_SEARCH
 
         base_url = INDEED_DOMAINS.get(currency, "https://www.indeed.com")
-        driver   = None
         jobs: List[Dict] = []
         collected = 0
 
         try:
-            driver = setup_driver()
-
-            for page in range(self.MAX_PAGES):
+            for page_num in range(self.MAX_PAGES):
                 if collected >= max_jobs:
                     break
 
@@ -103,448 +51,245 @@ class IndeedScraper(BaseScraper):
                     f"q={quote_plus(keyword)}"
                     f"&l={quote_plus(location)}"
                     f"&sort=date"
-                    f"&start={page * 15}"
+                    f"&start={page_num * 15}"
                 )
-                self.logger.info("Indeed: loading page %d — %s", page, url)
-                driver.get(url)
-                time.sleep(random.uniform(3, 5))
+                self.logger.info("Indeed: loading page %d — %s", page_num, url)
+                page = StealthyFetcher.fetch(url, headless=True, network_idle=True)
 
-                # CAPTCHA check — skip page if blocked
-                if "captcha" in driver.title.lower():
-                    self.logger.warning(
-                        "Indeed: CAPTCHA detected on page %d, skipping", page
-                    )
+                # Block detection
+                page_text = (page.css("body::text").get() or "")
+                if any(w in page_text.lower()[:3000] for w in ["captcha", "unusual traffic", "are you a robot"]):
+                    self.logger.warning("Indeed: blocked on page %d", page_num)
                     continue
 
-                # Also check for robot/block pages in body
-                page_text = driver.page_source.lower()
-                if "unusual traffic" in page_text or "blocked" in page_text[:2000]:
-                    self.logger.warning(
-                        "Indeed: blocked page detected on page %d, skipping", page
-                    )
-                    continue
-
-                # Close any consent/cookie modals
-                self._close_modals(driver)
-
-                # Collect cards from this results page
-                cards = self._collect_cards(driver, base_url)
-                self.logger.info(
-                    "Indeed: page %d — found %d cards for '%s' in '%s'",
-                    page, len(cards), keyword, location,
-                )
+                cards = self._collect_cards(page, base_url)
+                self.logger.info("Indeed: page %d — %d cards for '%s'", page_num, len(cards), keyword)
 
                 if not cards:
-                    self.logger.info("Indeed: no cards found on page %d, stopping", page)
                     break
 
                 for card in cards:
                     if collected >= max_jobs:
                         break
-
                     try:
-                        details = self._get_details(driver, card, currency, usd_rate)
-                        job = {**card, **details}
-
-                        # Stamp metadata.
-                        # NOTE: "city" (display name) is stamped by main.py after
-                        # scrape() returns — do not set it here.
-                        job["currency"]             = currency
-                        job["source_website"]       = self.SOURCE
-                        job["is_faang"]             = is_faang(job.get("company_name", ""))
-                        job["cost_of_living_index"] = COL_INDEX.get(location, 80)
-
-                        # Dedup key
+                        details = self._get_details(card, currency, usd_rate)
+                        job = {**card, **details,
+                               "currency": currency,
+                               "source_website": self.SOURCE,
+                               "is_faang": is_faang(card.get("company_name", "")),
+                               "cost_of_living_index": COL_INDEX.get(location, 80)}
                         company = (job.get("company_name") or "").lower().strip()
                         title   = (job.get("job_title")    or "").lower().strip()
-                        loc     = location.lower().strip()
                         job["dedup_key"] = hashlib.md5(
-                            f"{company}{title}{loc}".encode()
+                            f"{company}{title}{location.lower()}".encode()
                         ).hexdigest()[:12]
-
                         jobs.append(self.validate_job_record(job))
                         collected += 1
-                        self.logger.info(
-                            "Indeed: scraped %d/%d — %s @ %s",
-                            collected, max_jobs,
-                            job.get("job_title", "?"),
-                            job.get("company_name", "?"),
-                        )
-
-                        # Polite delay between detail page fetches
-                        time.sleep(random.uniform(2.5, 5.0))
-
+                        self.logger.info("Indeed: %d/%d — %s @ %s",
+                                         collected, max_jobs,
+                                         job.get("job_title", "?"),
+                                         job.get("company_name", "?"))
+                        time.sleep(random.uniform(1.5, 3.0))
                     except Exception as e:
-                        self.logger.error("Indeed: error processing card: %s", e)
-                        continue
-
+                        self.logger.debug("Indeed: card error: %s", e)
         except Exception as e:
             self.logger.error("Indeed scraper failed: %s", e)
-        finally:
-            if driver:
-                try:
-                    driver.quit()
-                except Exception:
-                    pass
 
         return self.validate_batch(jobs)
 
-    # ── Modal dismissal ────────────────────────────────────────────────────────
-    def _close_modals(self, driver) -> None:
-        """Close consent, cookie, and signup modals that Indeed often shows."""
-        selectors = [
-            "#onetrust-accept-btn-handler",
-            "[aria-label='close']",
-            "[aria-label='Close']",
-            ".icl-CloseButton",
-            "#close-btn",
-            ".popover-x-button",
-            "[data-testid='modal-close-btn']",
-        ]
-        for sel in selectors:
+    def _collect_cards(self, page, base_url: str) -> List[Dict]:
+        # .job_seen_beacon is the confirmed working selector
+        card_els = page.css(".job_seen_beacon")
+        if not card_els:
+            for sel in [".tapItem", "[data-jk]", ".resultContent"]:
+                card_els = page.css(sel)
+                if card_els:
+                    break
+
+        cards = []
+        for el in card_els:
             try:
-                btn = driver.find_element(By.CSS_SELECTOR, sel)
-                btn.click()
-                time.sleep(0.5)
-            except Exception:
-                continue
-
-    # ── Card collection ────────────────────────────────────────────────────────
-    def _collect_cards(self, driver, base_url: str) -> List[Dict]:
-        """
-        Collect job cards from the current Indeed search results page.
-
-        Tries multiple CSS selector patterns to handle Indeed's frequent
-        HTML structure changes.
-
-        Returns list of dicts with keys:
-            job_title, company_name, location, salary,
-            job_link, job_id, date_posted_raw
-        """
-        # Try selectors in order — Indeed changes class names frequently
-        card_elements = []
-        for sel in [
-            ".job_seen_beacon",
-            ".tapItem",
-            "[data-jk]",
-            ".resultContent",
-            "li.css-5lfssm",        # newer Indeed layout
-        ]:
-            card_elements = driver.find_elements(By.CSS_SELECTOR, sel)
-            if card_elements:
-                break
-
-        cards: List[Dict] = []
-
-        for el in card_elements:
-            try:
-                # ── Title + link ───────────────────────────────────────────────
-                job_title = None
-                job_link  = None
-                for sel in [
-                    "h2.jobTitle a",
-                    "h2 a[data-jk]",
-                    "h2 a",
-                    ".jcs-JobTitle a",
-                    "[data-testid='job-title'] a",
-                ]:
-                    try:
-                        title_el  = el.find_element(By.CSS_SELECTOR, sel)
-                        job_title = clean_text(title_el.text)
-                        job_link  = title_el.get_attribute("href")
-                        if job_title and job_link:
-                            break
-                    except NoSuchElementException:
-                        continue
-
-                # Skip card with no title or link
-                if not job_title or not job_link:
+                # Title — span inside a.jcs-JobTitle
+                title_el = el.css("h2.jobTitle a span, a.jcs-JobTitle span, h2 a span, h2 span")
+                job_title = clean_text(title_el[0].text) if title_el else None
+                if not job_title:
+                    # fallback: text of the whole h2
+                    h2 = el.css("h2.jobTitle, h2")
+                    job_title = clean_text(h2[0].text) if h2 else None
+                if not job_title:
                     continue
 
-                # Resolve relative URLs
-                if job_link and not job_link.startswith("http"):
-                    job_link = urljoin(base_url, job_link)
+                # Link
+                link_el = el.css("h2.jobTitle a, a.jcs-JobTitle, h2 a")
+                job_link = None
+                job_id   = None
+                if link_el:
+                    href = link_el[0].attrib.get("href", "")
+                    if href and not href.startswith("http"):
+                        href = urljoin(base_url, href)
+                    job_link = href
+                    jk = re.search(r"jk=([a-f0-9]+)", href)
+                    if jk:
+                        job_id = jk.group(1)
+                # Also try data-jk on parent
+                if not job_id:
+                    job_id = el.attrib.get("data-jk")
 
-                # ── Company ────────────────────────────────────────────────────
-                company_name = None
-                for sel in [
-                    ".companyName",
-                    "[data-testid='company-name']",
-                    ".css-1ioi40n",     # newer layout
-                    "span.companyName",
-                ]:
-                    try:
-                        company_name = clean_text(
-                            el.find_element(By.CSS_SELECTOR, sel).text
-                        )
-                        if company_name:
-                            break
-                    except NoSuchElementException:
-                        continue
+                # Company
+                company_el = el.css(
+                    "[data-testid='company-name'], .companyName, "
+                    "span[class*='companyName'], a[data-tn-element='companyName']"
+                )
+                company_name = clean_text(company_el[0].text) if company_el else None
 
-                # ── Location ───────────────────────────────────────────────────
-                card_location = None
-                for sel in [
-                    ".companyLocation",
-                    "[data-testid='text-location']",
-                    ".css-1p0sjhy",     # newer layout
-                ]:
-                    try:
-                        card_location = clean_text(
-                            el.find_element(By.CSS_SELECTOR, sel).text
-                        )
-                        if card_location:
-                            break
-                    except NoSuchElementException:
-                        continue
+                # Location
+                loc_el = el.css(
+                    "[data-testid='text-location'], .companyLocation, "
+                    "div[class*='companyLocation']"
+                )
+                card_location = clean_text(loc_el[0].text) if loc_el else None
 
-                # ── Salary on card (Indeed shows this more often than LinkedIn) ─
+                # Salary on card
+                sal_el = el.css(
+                    ".salary-snippet-container, .salaryText, "
+                    ".estimated-salary, [data-testid='attribute_snippet_testid']"
+                )
                 salary_raw = None
-                for sel in [
-                    ".salary-snippet-container",
-                    ".salaryText",
-                    ".estimated-salary",
-                    "[data-testid='attribute_snippet_testid']",
-                    ".css-1cvvo1r",
-                ]:
-                    try:
-                        salary_raw = clean_text(
-                            el.find_element(By.CSS_SELECTOR, sel).text
-                        )
-                        if salary_raw and any(
-                            c in salary_raw for c in ["$", "£", "€", "₹", "K", "k"]
-                        ):
-                            break
-                        else:
-                            salary_raw = None
-                    except NoSuchElementException:
-                        continue
+                if sal_el:
+                    raw = clean_text(sal_el[0].text)
+                    if raw and any(c in raw for c in ["$", "£", "€", "K", "k"]):
+                        salary_raw = raw
 
-                # ── Employment type on card ────────────────────────────────────
-                employment_type = None
-                for sel in [
-                    ".attribute_snippet",
-                    "[data-testid='attribute_snippet_testid']",
-                ]:
-                    try:
-                        snippets = el.find_elements(By.CSS_SELECTOR, sel)
-                        for snippet in snippets:
-                            text = (snippet.text or "").lower()
-                            for etype in [
-                                "full-time", "part-time", "contract",
-                                "temporary", "internship", "permanent",
-                            ]:
-                                if etype in text:
-                                    employment_type = etype.replace("-", " ").title()
-                                    break
-                            if employment_type:
-                                break
-                    except NoSuchElementException:
-                        continue
-
-                # ── Job ID ─────────────────────────────────────────────────────
-                job_id = el.get_attribute("data-jk")
-                if not job_id and job_link:
-                    jk_match = re.search(r"jk=([a-f0-9]+)", job_link)
-                    if jk_match:
-                        job_id = jk_match.group(1)
-
-                # ── Date posted on card ────────────────────────────────────────
+                # Date
+                date_el = el.css(".date, [data-testid='myJobsStateDate'], span.date")
                 date_raw = None
-                for sel in [
-                    ".date",
-                    "[data-testid='myJobsStateDate']",
-                    "span.date",
-                ]:
-                    try:
-                        date_text = clean_text(
-                            el.find_element(By.CSS_SELECTOR, sel).text
-                        )
-                        # Only keep if it looks like a date ("Posted X days ago")
-                        if date_text and any(
-                            w in date_text.lower()
-                            for w in ["posted", "today", "ago", "just"]
-                        ):
-                            date_raw = date_text
+                if date_el:
+                    dt = clean_text(date_el[0].text)
+                    if dt and any(w in dt.lower() for w in ["posted", "today", "ago", "just"]):
+                        date_raw = dt
+
+                # Employment type from snippets
+                employment_type = None
+                snippets = el.css(".attribute_snippet, [data-testid='attribute_snippet_testid']")
+                for snip in snippets:
+                    t = (snip.text or "").lower()
+                    for etype in ["full-time", "part-time", "contract", "temporary", "internship"]:
+                        if etype in t:
+                            employment_type = etype.replace("-", " ").title()
                             break
-                    except NoSuchElementException:
-                        continue
+                    if employment_type:
+                        break
 
                 cards.append({
                     "job_title":       job_title,
                     "company_name":    company_name,
                     "location":        card_location,
-                    "salary":          salary_raw,       # raw string — normalised in _get_details
+                    "salary":          salary_raw,
                     "employment_type": employment_type,
                     "job_link":        job_link,
                     "job_id":          job_id,
                     "date_posted_raw": date_raw,
                 })
-
             except Exception as e:
-                self.logger.debug("Indeed: skipping card — %s", e)
-                continue
-
+                self.logger.debug("Indeed: card parse error — %s", e)
         return cards
 
-    # ── Detail page ────────────────────────────────────────────────────────────
-    def _get_details(
-        self,
-        driver,
-        card: Dict,
-        currency: str,
-        usd_rate: float,
-    ) -> Dict:
-        """
-        Visit an Indeed job detail page and extract all enriched fields.
-
-        Safe to call — never raises. Returns defaults if extraction fails.
-
-        Args:
-            driver:   Selenium WebDriver
-            card:     Card dict from _collect_cards
-            currency: Local currency code
-            usd_rate: Conversion rate to USD
-
-        Returns:
-            Dict with all detail fields. Missing fields default to None/False.
-        """
+    def _get_details(self, card: Dict, currency: str, usd_rate: float) -> Dict:
         details: Dict = {
             "salary":              None,
             "salary_currency":     currency,
             "seniority_level":     None,
             "experience_required": None,
-            "employment_type":     card.get("employment_type"),  # carry forward from card
+            "employment_type":     card.get("employment_type"),
             "remote_type":         "On-site",
             "industry":            None,
             "education_required":  None,
             "has_equity":          False,
             "has_bonus":           False,
             "has_remote_benefits": False,
-            "date_posted_raw":     card.get("date_posted_raw"),  # carry forward from card
+            "date_posted_raw":     card.get("date_posted_raw"),
             "applicant_count":     None,
             "skills_required":     None,
             "job_description":     None,
         }
+
+        # Build card text for fallback extraction (when detail page is blocked)
+        card_text = f"{card.get('job_title', '')} {card.get('company_name', '')} {card.get('salary', '')} {card.get('location', '')}".lower()
+
+        # Get salary from card
+        salary_raw = card.get("salary")
+        if salary_raw:
+            details["salary"] = extract_salary_from_text(salary_raw, usd_rate)
 
         job_link = card.get("job_link")
         if not job_link:
             return details
 
         try:
-            driver.get(job_link)
-            time.sleep(random.uniform(2.5, 4.0))
+            page = StealthyFetcher.fetch(job_link, headless=True, network_idle=True)
 
-            # ── Description ────────────────────────────────────────────────────
+            # Description - updated selectors
             description = None
             for sel in [
-                "#jobDescriptionText",
+                ".jobsearch-JobComponent-description",
                 ".jobsearch-jobDescriptionText",
-                ".jobDescription",
-                "[data-testid='jobDescriptionText']",
+                "#jobDescriptionText",
+                "div[data-testid='jobDescriptionText']",
             ]:
-                try:
-                    elem = driver.find_element(By.CSS_SELECTOR, sel)
-                    text = clean_text(elem.text)
+                desc_els = page.css(sel)
+                if desc_els:
+                    # Use get_all_text() for nested content
+                    text = desc_els[0].get_all_text() or desc_els[0].text or ""
+                    text = clean_text(text)
                     if text and len(text) > 50:
                         description = text
                         details["job_description"] = description[:5000]
                         break
-                except NoSuchElementException:
-                    continue
 
-            # ── Salary — 3-layer: card → detail element → description text ─────
-            # Layer 1: salary already on card
+            # Salary: card → detail element → description scan
             salary_raw = card.get("salary")
             if salary_raw:
-                parsed = extract_salary_from_text(salary_raw, usd_rate)
-                if parsed:
-                    details["salary"] = parsed
+                details["salary"] = extract_salary_from_text(salary_raw, usd_rate)
 
-            # Layer 2: structured salary element on detail page
             if not details["salary"]:
-                for sel in [
-                    "#salaryInfoAndJobType",
-                    "[data-testid='attribute_snippet_testid']",
-                    ".jobsearch-JobMetadataHeader-item",
-                    ".js-match-insights-provider-hardcoded-content",
-                    ".css-1cvvo1r",
-                ]:
-                    try:
-                        sal_text = clean_text(
-                            driver.find_element(By.CSS_SELECTOR, sel).text
-                        )
-                        if sal_text and any(
-                            c in sal_text for c in ["$", "£", "€", "₹", "K", "k"]
-                        ):
+                for sel in ["#salaryInfoAndJobType",
+                             "[data-testid='attribute_snippet_testid']",
+                             ".jobsearch-JobMetadataHeader-item"]:
+                    sal_els = page.css(sel)
+                    if sal_els:
+                        sal_text = clean_text(sal_els[0].text)
+                        if sal_text and any(c in sal_text for c in ["$", "£", "€", "K", "k"]):
                             parsed = extract_salary_from_text(sal_text, usd_rate)
                             if parsed:
                                 details["salary"] = parsed
                                 break
-                    except NoSuchElementException:
-                        continue
 
-            # Layer 3: scan description text as last resort
             if not details["salary"] and description:
                 details["salary"] = extract_salary_from_text(description, usd_rate)
 
-            # ── Employment type from detail page ───────────────────────────────
-            if not details["employment_type"]:
-                for sel in [
-                    "#jobDetailsSection",
-                    ".jobsearch-JobDescriptionSection-sectionItem",
-                    "[data-testid='jobDetailsSection']",
-                ]:
-                    try:
-                        type_text = driver.find_element(
-                            By.CSS_SELECTOR, sel
-                        ).text.lower()
-                        for etype in [
-                            "full-time", "part-time", "contract",
-                            "temporary", "internship", "permanent",
-                        ]:
-                            if etype in type_text:
-                                details["employment_type"] = etype.replace("-", " ").title()
-                                break
-                        if details["employment_type"]:
-                            break
-                    except NoSuchElementException:
-                        continue
+            # Extract from description if available, otherwise fallback to card_text
+            extract_from = description or card_text
 
-            if description:
-                # Skills from SKILL_LIST matching
-                details["skills_required"] = extract_skills(description)
-
-                # Experience — salary patterns stripped first
-                details["experience_required"] = extract_experience(description)
-
-                # Indeed metadata: remote, equity, bonus, education
-                meta = parse_indeed_metadata(description)
-                details["remote_type"]        = meta.get("remote_type", "On-site")
-                details["education_required"] = meta.get("education_required")
-                details["has_equity"]         = meta.get("has_equity", False)
-                details["has_bonus"]          = meta.get("has_bonus", False)
-
-                # employment_type from description if still missing
+            if extract_from:
+                details["skills_required"]     = extract_skills(extract_from)
+                details["experience_required"] = extract_experience(extract_from)
+                meta = parse_indeed_metadata(extract_from)
+                details["remote_type"]         = meta.get("remote_type", "On-site")
+                details["education_required"]  = meta.get("education_required")
+                details["has_equity"]          = meta.get("has_equity", False)
+                details["has_bonus"]           = meta.get("has_bonus", False)
                 if not details["employment_type"]:
                     details["employment_type"] = meta.get("employment_type")
+                if not details["salary"]:
+                    details["salary"] = extract_salary_from_text(extract_from, usd_rate)
 
-            # ── Seniority from job title ───────────────────────────────────────
             details["seniority_level"] = infer_seniority(card.get("job_title"))
-
-            # Remote benefits flag
             if details["remote_type"] in ("Remote", "Hybrid"):
                 details["has_remote_benefits"] = True
-
-            # Experience fallback from seniority
             if not details["experience_required"] and details["seniority_level"]:
-                details["experience_required"] = seniority_to_experience(
-                    details["seniority_level"]
-                )
+                details["experience_required"] = seniority_to_experience(details["seniority_level"])
 
         except Exception as e:
-            self.logger.error(
-                "Indeed: detail page error for %s — %s", job_link, e
-            )
+            self.logger.error("Indeed: detail page error for %s — %s", job_link, e)
 
         return details

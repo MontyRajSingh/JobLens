@@ -7,20 +7,19 @@ Extracts job data from the __NEXT_DATA__ JSON embedded in the page HTML.
 Levels.fyi is a Next.js app that pre-renders job data in a script tag,
 giving us structured salary, company, and location data without needing
 to parse the DOM.
+
+Uses Scrapling's Fetcher (HTTP-only) since the data is server-rendered.
 """
 
 import json
-import time
-import random
 import hashlib
 from typing import Dict, List
 from urllib.parse import quote_plus
 
-from bs4 import BeautifulSoup
+from scrapling.fetchers import Fetcher
 
 from scrapers.base_scraper import BaseScraper
-from utils.driver_utils import setup_driver
-from utils.text_utils import clean_text, infer_seniority, is_faang
+from utils.text_utils import infer_seniority, is_faang
 from config import MAX_JOBS_PER_SEARCH, COL_INDEX
 
 
@@ -49,31 +48,26 @@ class LevelsFyiScraper(BaseScraper):
         if max_jobs is None:
             max_jobs = MAX_JOBS_PER_SEARCH
 
-        driver = None
         jobs: List[Dict] = []
 
         try:
-            driver = setup_driver()
-
             url = (
                 f"https://www.levels.fyi/jobs"
                 f"?searchText={quote_plus(keyword)}"
                 f"&location={quote_plus(location)}"
             )
             self.logger.info("Levels.fyi: loading %s", url)
-            driver.get(url)
-            time.sleep(random.uniform(4, 6))
 
-            soup = BeautifulSoup(driver.page_source, "html.parser")
+            page = Fetcher.get(url, stealthy_headers=True)
 
             # Extract __NEXT_DATA__ JSON
-            next_data_el = soup.select_one("script#__NEXT_DATA__")
-            if not next_data_el or not next_data_el.string:
+            json_text = page.css('script#__NEXT_DATA__::text').get()
+            if not json_text:
                 self.logger.warning("Levels.fyi: __NEXT_DATA__ not found")
                 return self.validate_batch(jobs)
 
             try:
-                data = json.loads(next_data_el.string)
+                data = json.loads(json_text)
             except json.JSONDecodeError as e:
                 self.logger.error("Levels.fyi: failed to parse __NEXT_DATA__: %s", e)
                 return self.validate_batch(jobs)
@@ -195,11 +189,5 @@ class LevelsFyiScraper(BaseScraper):
 
         except Exception as e:
             self.logger.error("Levels.fyi scraper failed: %s", e)
-        finally:
-            if driver:
-                try:
-                    driver.quit()
-                except Exception:
-                    pass
 
         return self.validate_batch(jobs)

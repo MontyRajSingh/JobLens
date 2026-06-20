@@ -14,7 +14,7 @@ import re
 import logging
 from typing import Optional
 
-from bs4 import BeautifulSoup
+
 
 logger = logging.getLogger(__name__)
 
@@ -188,76 +188,4 @@ def extract_salary_numeric_from_text(text: str, usd_rate: float = 1.0) -> Option
     return salary_text_to_number(formatted)
 
 
-# ──────────────────────────────────────────────
-# Extract salary from Selenium page
-# ──────────────────────────────────────────────
 
-def extract_salary_from_page(driver, usd_rate: float = 1.0) -> Optional[str]:
-    """
-    3-layer salary extraction from a Selenium-driven page:
-    1. CSS selectors targeting common salary elements
-    2. Insight/span elements with salary-related classes
-    3. Full-page BeautifulSoup scan
-
-    Args:
-        driver: Selenium WebDriver with a loaded page.
-        usd_rate: Currency-to-USD multiplier.
-
-    Returns:
-        Formatted USD salary string or None.
-    """
-    from selenium.webdriver.common.by import By
-
-    # Layer 1: CSS selectors for salary elements
-    salary_selectors = [
-        "#salaryInfoAndJobType",
-        ".salary-snippet-container",
-        "[data-test='detailSalary']",
-        ".salaryEstimate",
-        ".css-1bluz6i",
-        ".jobsearch-JobMetadataHeader-item",
-        ".salary-estimate",
-        ".compensation__salary",
-    ]
-
-    for selector in salary_selectors:
-        try:
-            elements = driver.find_elements(By.CSS_SELECTOR, selector)
-            for el in elements:
-                text = el.text.strip()
-                if text:
-                    result = extract_salary_from_text(text, usd_rate)
-                    if result:
-                        logger.debug("Salary found via CSS '%s': %s", selector, result)
-                        return result
-        except Exception:
-            continue
-
-    # Layer 2: Insight span elements
-    try:
-        spans = driver.find_elements(By.CSS_SELECTOR, "span")
-        for span in spans:
-            try:
-                text = span.text.strip()
-                if text and re.search(r"[\$£€₹]|salary|compensation|LPA", text, re.IGNORECASE):
-                    result = extract_salary_from_text(text, usd_rate)
-                    if result:
-                        logger.debug("Salary found via span scan: %s", result)
-                        return result
-            except Exception:
-                continue
-    except Exception:
-        pass
-
-    # Layer 3: BeautifulSoup full-page scan
-    try:
-        soup = BeautifulSoup(driver.page_source, "html.parser")
-        page_text = soup.get_text(separator=" ", strip=True)
-        result = extract_salary_from_text(page_text, usd_rate)
-        if result:
-            logger.debug("Salary found via BS4 page scan: %s", result)
-            return result
-    except Exception:
-        pass
-
-    return None

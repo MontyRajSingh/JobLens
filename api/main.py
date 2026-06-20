@@ -123,7 +123,7 @@ async def lifespan(app: FastAPI):
             logger.warning("⚠️  Could not count jobs: %s", e)
             _app_state["jobs_count"] = 0
 
-    logger.info("🚀 JobLens API ready at http://localhost:8000")
+    logger.info("JobLens API ready at http://localhost:8000")
     logger.info("📖 Docs: http://localhost:8000/docs")
 
     yield

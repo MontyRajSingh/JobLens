@@ -210,7 +210,7 @@ def train_pipeline(args) -> None:
 
     source = "PostgreSQL database" if args.use_db else ("Kaggle dataset" if args.use_kaggle else args.data)
     print(f"\n{'='*70}")
-    print(f" 🚀 JOBLENS TRAINING PIPELINE")
+    print(f" JOBLENS TRAINING PIPELINE")
     print(f"{'='*70}")
     print(f" Source:    {source}")
     if args.use_kaggle and args.merge_scraped:

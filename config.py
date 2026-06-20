@@ -15,8 +15,8 @@ load_dotenv()
 # Output & limits
 # ──────────────────────────────────────────────
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
-MAX_JOBS_PER_SEARCH = 100
-ENABLED_SOURCES = ["indeed", "levelsfyi", "payscale", "ziprecruiter"]
+MAX_JOBS_PER_SEARCH = 5
+ENABLED_SOURCES = ["indeed", "levelsfyi", "payscale", "ziprecruiter", "linkedin", "glassdoor"]
 
 # ──────────────────────────────────────────────
 # Cities to scrape: (search_location, linkedin_location, currency, usd_rate)

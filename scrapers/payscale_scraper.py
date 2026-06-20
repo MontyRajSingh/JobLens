@@ -3,227 +3,222 @@ scrapers/payscale_scraper.py
 -----------------------------
 PayScale salary scraper. Inherits BaseScraper.
 
-Scrapes salary research data from PayScale.com. Instead of looking for
-individual job listings, this scraper extracts the rich structured salary
-data from PayScale's research pages: median salary, salary range, and
-per-company salary breakdowns (often 50-100+ companies per job title).
+PayScale's research pages contain per-company salary data in a structured
+format. We extract the median salary and fall back to company-specific data
+from the page's internal API response embedded in __NEXT_DATA__.
+
+Uses Scrapling's StealthyFetcher for JS rendering.
 """
 
 import re
-import time
-import random
+import json
 import hashlib
-from typing import Dict, List
+from typing import Dict, List, Optional
 from urllib.parse import quote
 
-from bs4 import BeautifulSoup
-from selenium.common.exceptions import TimeoutException
+from scrapling.fetchers import StealthyFetcher
 
 from scrapers.base_scraper import BaseScraper
-from utils.driver_utils import setup_driver
-from utils.text_utils import clean_text, infer_seniority, is_faang
-from utils.salary_utils import parse_salary_to_usd
+from utils.text_utils import infer_seniority, is_faang
+from utils.salary_utils import extract_salary_from_text
 from config import MAX_JOBS_PER_SEARCH, COL_INDEX
 
 
 class PayScaleScraper(BaseScraper):
-    """
-    PayScale scraper.
-
-    Scrapes PayScale's salary research pages. These pages contain:
-    - The median/average salary for a job title
-    - Per-company salary averages (50-100+ companies)
-    - Per-city salary breakdowns
-    - Per-experience-level salary data
-
-    Each company+salary pair becomes a separate job record.
-    """
-
     SOURCE = "PayScale"
-
-    # PayScale uses Job=Title_With_Underscores format
-    EXPERIENCE_MAP = {
-        "Entry-Level": "Entry Level (0-2 years)",
-        "Early-Career": "Entry Level (0-2 years)",
-        "Mid-Career": "Mid-Level (2-5 years)",
-        "Experienced": "Senior (5+ years)",
-        "Late-Career": "Senior (5+ years)",
-    }
 
     def __init__(self):
         super().__init__()
 
-    def scrape(
-        self,
-        keyword: str,
-        location: str,
-        currency: str = "USD",
-        usd_rate: float = 1.0,
-        max_jobs: int = None,
-    ) -> List[Dict]:
+    def scrape(self, keyword, location, currency="USD", usd_rate=1.0, max_jobs=None):
         if max_jobs is None:
             max_jobs = MAX_JOBS_PER_SEARCH
 
-        driver = None
         jobs: List[Dict] = []
 
         try:
-            driver = setup_driver()
-
-            # PayScale URL format: Job=Data_Scientist
             formatted_keyword = keyword.strip().replace(" ", "_").title()
             url = f"https://www.payscale.com/research/US/Job={quote(formatted_keyword, safe='')}/Salary"
             self.logger.info("PayScale: loading %s", url)
-            driver.get(url)
-            time.sleep(random.uniform(3, 5))
 
-            # Scroll to load all content
-            for _ in range(5):
-                driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-                time.sleep(random.uniform(0.8, 1.2))
+            page = StealthyFetcher.fetch(url, headless=True, wait_until="load")
 
-            soup = BeautifulSoup(driver.page_source, "html.parser")
+            # ── Try to extract structured data from __NEXT_DATA__ first
+            next_data_el = page.css("script#__NEXT_DATA__::text")
+            company_salaries = []
+            median_salary_str = None
 
-            # 1. Extract the median/average salary from the main chart
-            median_salary = None
-            median_el = soup.select_one("span.paycharts__value")
-            if median_el:
-                median_salary = parse_salary_to_usd(median_el.get_text(strip=True), usd_rate)
-                self.logger.info("PayScale: median salary = %s", median_salary)
-
-            # 2. Extract salary range from percentile chart
-            range_min = None
-            range_max = None
-            for div in soup.select("div.tablerow__value"):
-                text = div.get_text(strip=True)
-                # First tablerow__value is usually "Base Salary: $73k - $145k"
-                range_match = re.search(r'\$(\d+[\d,]*)[kK]?\s*[-–]\s*\$(\d+[\d,]*)[kK]?', text)
-                if range_match and not range_min:
-                    low_str, high_str = range_match.group(1), range_match.group(2)
-                    try:
-                        range_min = int(low_str.replace(",", "")) * (1000 if "k" in text.lower() or int(low_str.replace(",", "")) < 1000 else 1)
-                        range_max = int(high_str.replace(",", "")) * (1000 if "k" in text.lower() or int(high_str.replace(",", "")) < 1000 else 1)
-                    except ValueError:
-                        pass
-
-            # 3. Extract per-company salary data from employer links
-            # These are <a> tags with href containing /Salary/ and company name
-            company_links = soup.select("a[href*='/Salary/']")
-            seen_companies = set()
-
-            for link in company_links:
-                if len(jobs) >= max_jobs:
-                    break
-
-                href = link.get("href", "")
-                text = link.get_text(strip=True)
-
-                # Filter: must be a company-specific salary page
-                # Format: /research/US/Job=Data_Scientist/Salary/HASH/Company-Name
-                if not re.search(r'/Salary/[a-f0-9]+/', href):
-                    continue
-
-                # Extract company name and salary from the link text
-                # Text format: "Amazon.com IncAvg. Salary: $107,588"
-                salary_match = re.search(r'Avg\.\s*Salary:\s*\$([\d,]+)', text)
-                if not salary_match:
-                    continue
-
-                salary_str = salary_match.group(1)
-                company_name = text[:text.index("Avg.")].strip()
-
-                if not company_name or company_name in seen_companies:
-                    continue
-                seen_companies.add(company_name)
-
-                salary_amount = salary_str.replace(",", "")
+            if next_data_el:
                 try:
-                    salary_usd = f"${int(salary_amount):,} USD/yr"
-                except ValueError:
-                    continue
+                    data = json.loads(next_data_el.get())
+                    # Navigate into common PayScale data paths
+                    props = data.get("props", {}).get("pageProps", {})
+                    # Try "salaryData" or "jobData"
+                    salary_data = props.get("salaryData") or props.get("jobData") or {}
+                    median = salary_data.get("nationalSalaryMedian") or salary_data.get("medianPay")
+                    if median:
+                        median_salary_str = f"${int(median):,} USD/yr"
+                        self.logger.info("PayScale: median from JSON: %s", median_salary_str)
+                    # Per-company breakdown
+                    companies = salary_data.get("companySalaries") or []
+                    for c in companies:
+                        name = c.get("companyName") or c.get("name")
+                        pay  = c.get("medianSalary") or c.get("salary")
+                        if name and pay:
+                            company_salaries.append({"company": name, "salary": int(pay)})
+                except Exception as e:
+                    self.logger.debug("PayScale: __NEXT_DATA__ parse failed: %s", e)
 
+            # ── Fallback 1: CSS selector for median salary display
+            if not median_salary_str:
+                for sel in [
+                    "span.paycharts__value",
+                    "[class*='paycharts__value']",
+                    "[class*='salary-value']",
+                    "span[class*='pay-value']",
+                    "div[class*='salary'] span",
+                ]:
+                    el = page.css(sel)
+                    if el:
+                        text = clean_text(el[0].text)
+                        if text:
+                            parsed = extract_salary_from_text(text, usd_rate)
+                            if parsed:
+                                median_salary_str = parsed
+                                self.logger.info("PayScale: median from CSS '%s': %s", sel, parsed)
+                                break
+
+            # ── Fallback 2: scan full page text for salary patterns
+            if not median_salary_str:
+                page_text = page.css("body::text").get() or ""
+                # Look for patterns like "median salary of $120,000"
+                m = re.search(r'median\s+(?:salary|pay)(?:\s+of)?\s+\$?([\d,]+)', page_text, re.I)
+                if m:
+                    amount = int(m.group(1).replace(",", ""))
+                    if 20_000 < amount < 1_000_000:
+                        median_salary_str = f"${amount:,} USD/yr"
+                        self.logger.info("PayScale: median from text scan: %s", median_salary_str)
+
+            # ── Fallback 3: CSS for per-company rows on the page
+            if not company_salaries:
+                # PayScale renders employer rows with salary averages
+                company_rows = page.css(
+                    "li[class*='employer'], div[class*='employer-row'], "
+                    "tr[class*='employer'], [class*='company-salary-row']"
+                )
+                for row in company_rows:
+                    row_text = row.text or ""
+                    # Pattern: "Company Name ... $123,456"
+                    salary_match = re.search(r'\$([\d,]+)', row_text)
+                    if not salary_match:
+                        continue
+                    # Company name: first meaningful text chunk before the dollar sign
+                    name_match = re.match(r'^([A-Za-z][^$\n]{3,60}?)\s+\$', row_text.strip())
+                    company_nm = name_match.group(1).strip() if name_match else None
+                    if not company_nm:
+                        # Try fetching from a link within the row
+                        link_el = row.css("a")
+                        if link_el:
+                            company_nm = clean_text(link_el[0].text)
+                    if company_nm:
+                        salary_val = int(salary_match.group(1).replace(",", ""))
+                        if 20_000 < salary_val < 1_000_000:
+                            company_salaries.append({"company": company_nm, "salary": salary_val})
+
+            self.logger.info(
+                "PayScale: median=%s, %d per-company entries",
+                median_salary_str, len(company_salaries)
+            )
+
+            # ── Build job records from per-company data
+            seen = set()
+            for entry in company_salaries[:max_jobs]:
+                company_name = entry["company"]
+                if company_name in seen:
+                    continue
+                seen.add(company_name)
+
+                salary_usd = f"${entry['salary']:,} USD/yr"
                 company_lower = company_name.lower().strip()
-                title_lower = keyword.lower().strip()
-                loc_lower = location.lower().strip()
+                title_lower   = keyword.lower().strip()
+                loc_lower     = location.lower().strip()
                 dedup_key = hashlib.md5(
                     f"payscale{company_lower}{title_lower}{loc_lower}".encode()
                 ).hexdigest()[:12]
 
                 job = {
-                    "job_title": keyword.title(),
-                    "company_name": company_name,
-                    "location": location,
-                    "salary": salary_usd,
-                    "salary_currency": currency,
-                    "seniority_level": infer_seniority(keyword, None),
-                    "experience_required": None,
-                    "employment_type": "Full-time",
-                    "remote_type": "On-site",
-                    "industry": None,
-                    "education_required": None,
-                    "has_equity": False,
-                    "has_bonus": False,
-                    "has_remote_benefits": False,
-                    "skills_required": None,
-                    "job_description": f"PayScale average salary for {keyword} at {company_name}",
-                    "job_link": f"https://www.payscale.com{href}" if href.startswith("/") else href,
-                    "job_id": dedup_key,
-                    "source_website": self.SOURCE,
-                    "dedup_key": dedup_key,
-                    "is_faang": is_faang(company_name),
+                    "job_title":            keyword.title(),
+                    "company_name":         company_name,
+                    "location":             location,
+                    "salary":               salary_usd,
+                    "salary_currency":      currency,
+                    "seniority_level":      infer_seniority(keyword, None),
+                    "experience_required":  None,
+                    "employment_type":      "Full-time",
+                    "remote_type":          "On-site",
+                    "industry":             None,
+                    "education_required":   None,
+                    "has_equity":           False,
+                    "has_bonus":            False,
+                    "has_remote_benefits":  False,
+                    "skills_required":      None,
+                    "job_description":      f"PayScale average salary for {keyword} at {company_name}",
+                    "job_link":             url,
+                    "job_id":               dedup_key,
+                    "source_website":       self.SOURCE,
+                    "dedup_key":            dedup_key,
+                    "is_faang":             is_faang(company_name),
                     "cost_of_living_index": COL_INDEX.get(location, 80),
-                    "date_posted_raw": None,
-                    "applicant_count": None,
-                    "currency": currency,
+                    "date_posted_raw":      None,
+                    "applicant_count":      None,
+                    "currency":             currency,
                 }
-
                 jobs.append(self.validate_job_record(job))
-                self.logger.info(
-                    "PayScale: scraped %d — %s @ %s (%s)",
-                    len(jobs), keyword.title(), company_name, salary_usd,
-                )
+                self.logger.info("PayScale: %s @ %s (%s)", keyword.title(), company_name, salary_usd)
 
-            # 4. Fallback: if no per-company data, use the median
-            if not jobs and median_salary:
+            # ── If no per-company data, emit single median record
+            if not jobs and median_salary_str:
                 dedup_key = hashlib.md5(
                     f"payscale{keyword.lower()}{location.lower()}".encode()
                 ).hexdigest()[:12]
                 job = {
-                    "job_title": keyword.title(),
-                    "company_name": None,
-                    "location": location,
-                    "salary": median_salary,
-                    "salary_currency": currency,
-                    "seniority_level": infer_seniority(keyword, None),
-                    "experience_required": None,
-                    "employment_type": "Full-time",
-                    "remote_type": "On-site",
-                    "industry": None,
-                    "education_required": None,
-                    "has_equity": False,
-                    "has_bonus": False,
-                    "has_remote_benefits": False,
-                    "skills_required": None,
-                    "job_description": f"PayScale median salary for {keyword}: {median_salary}",
-                    "job_link": url,
-                    "job_id": dedup_key,
-                    "source_website": self.SOURCE,
-                    "dedup_key": dedup_key,
-                    "is_faang": False,
+                    "job_title":            keyword.title(),
+                    "company_name":         "Industry Average (PayScale)",
+                    "location":             location,
+                    "salary":               median_salary_str,
+                    "salary_currency":      currency,
+                    "seniority_level":      infer_seniority(keyword, None),
+                    "experience_required":  None,
+                    "employment_type":      "Full-time",
+                    "remote_type":          "On-site",
+                    "industry":             None,
+                    "education_required":   None,
+                    "has_equity":           False,
+                    "has_bonus":            False,
+                    "has_remote_benefits":  False,
+                    "skills_required":      None,
+                    "job_description":      f"PayScale national median salary for {keyword}: {median_salary_str}",
+                    "job_link":             url,
+                    "job_id":               dedup_key,
+                    "source_website":       self.SOURCE,
+                    "dedup_key":            dedup_key,
+                    "is_faang":             False,
                     "cost_of_living_index": COL_INDEX.get(location, 80),
-                    "date_posted_raw": None,
-                    "applicant_count": None,
-                    "currency": currency,
+                    "date_posted_raw":      None,
+                    "applicant_count":      None,
+                    "currency":             currency,
                 }
                 jobs.append(self.validate_job_record(job))
+                self.logger.info("PayScale: median fallback: %s", median_salary_str)
 
         except Exception as e:
             self.logger.error("PayScale scraper failed: %s", e)
-        finally:
-            if driver:
-                try:
-                    driver.quit()
-                except Exception:
-                    pass
 
         return self.validate_batch(jobs)
+
+
+def clean_text(text):
+    if not text:
+        return None
+    cleaned = " ".join(str(text).split()).strip()
+    return cleaned if cleaned else None
