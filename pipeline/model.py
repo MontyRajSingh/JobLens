@@ -25,8 +25,18 @@ from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.ensemble import RandomForestRegressor
 import xgboost as xgb
-import lightgbm as lgb
-from catboost import CatBoostRegressor
+
+# LightGBM and CatBoost are training-only extras. Inference (e.g. on Render)
+# only needs to load the saved best model via joblib, so keep these optional
+# to avoid hard import failures when the libraries aren't installed.
+try:
+    import lightgbm as lgb
+except ImportError:
+    lgb = None
+try:
+    from catboost import CatBoostRegressor
+except ImportError:
+    CatBoostRegressor = None
 
 logger = logging.getLogger(__name__)
 
@@ -146,41 +156,49 @@ class SalaryPredictor:
         self.metrics["XGBoost"] = {"rmse": xgb_rmse, "mae": xgb_mae, "r2": xgb_r2}
         logger.info("XGBoost (Best Params: %s) — RMSE: $%s | MAE: $%s | R²: %.3f", grid_search.best_params_, f"{xgb_rmse:,.0f}", f"{xgb_mae:,.0f}", xgb_r2)
 
-        # Step 5: Train LightGBM
-        logger.info("Training LightGBM...")
-        lgb_model = lgb.LGBMRegressor(
-            n_estimators=500,
-            learning_rate=0.05,
-            num_leaves=31,
-            random_state=42,
-            n_jobs=-1,
-            verbose=-1
-        )
-        lgb_model.fit(X_train, y_train)
-        lgb_pred = lgb_model.predict(X_test)
-        lgb_rmse = float(np.sqrt(mean_squared_error(y_test, lgb_pred)))
-        lgb_mae = float(mean_absolute_error(y_test, lgb_pred))
-        lgb_r2 = float(r2_score(y_test, lgb_pred))
-        self.metrics["LightGBM"] = {"rmse": lgb_rmse, "mae": lgb_mae, "r2": lgb_r2}
-        logger.info("LightGBM — RMSE: $%s | MAE: $%s | R²: %.3f", f"{lgb_rmse:,.0f}", f"{lgb_mae:,.0f}", lgb_r2)
+        # Step 5: Train LightGBM (optional)
+        if lgb is not None:
+            logger.info("Training LightGBM...")
+            lgb_model = lgb.LGBMRegressor(
+                n_estimators=500,
+                learning_rate=0.05,
+                num_leaves=31,
+                random_state=42,
+                n_jobs=-1,
+                verbose=-1
+            )
+            lgb_model.fit(X_train, y_train)
+            lgb_pred = lgb_model.predict(X_test)
+            lgb_rmse = float(np.sqrt(mean_squared_error(y_test, lgb_pred)))
+            lgb_mae = float(mean_absolute_error(y_test, lgb_pred))
+            lgb_r2 = float(r2_score(y_test, lgb_pred))
+            self.metrics["LightGBM"] = {"rmse": lgb_rmse, "mae": lgb_mae, "r2": lgb_r2}
+            logger.info("LightGBM — RMSE: $%s | MAE: $%s | R²: %.3f", f"{lgb_rmse:,.0f}", f"{lgb_mae:,.0f}", lgb_r2)
+        else:
+            lgb_model = lgb_pred = None
+            logger.info("LightGBM not installed — skipping")
 
-        # Step 6: Train CatBoost
-        logger.info("Training CatBoost...")
-        cb_model = CatBoostRegressor(
-            iterations=500,
-            learning_rate=0.05,
-            depth=6,
-            random_seed=42,
-            verbose=0,
-            thread_count=-1
-        )
-        cb_model.fit(X_train, y_train)
-        cb_pred = cb_model.predict(X_test)
-        cb_rmse = float(np.sqrt(mean_squared_error(y_test, cb_pred)))
-        cb_mae = float(mean_absolute_error(y_test, cb_pred))
-        cb_r2 = float(r2_score(y_test, cb_pred))
-        self.metrics["CatBoost"] = {"rmse": cb_rmse, "mae": cb_mae, "r2": cb_r2}
-        logger.info("CatBoost — RMSE: $%s | MAE: $%s | R²: %.3f", f"{cb_rmse:,.0f}", f"{cb_mae:,.0f}", cb_r2)
+        # Step 6: Train CatBoost (optional)
+        if CatBoostRegressor is not None:
+            logger.info("Training CatBoost...")
+            cb_model = CatBoostRegressor(
+                iterations=500,
+                learning_rate=0.05,
+                depth=6,
+                random_seed=42,
+                verbose=0,
+                thread_count=-1
+            )
+            cb_model.fit(X_train, y_train)
+            cb_pred = cb_model.predict(X_test)
+            cb_rmse = float(np.sqrt(mean_squared_error(y_test, cb_pred)))
+            cb_mae = float(mean_absolute_error(y_test, cb_pred))
+            cb_r2 = float(r2_score(y_test, cb_pred))
+            self.metrics["CatBoost"] = {"rmse": cb_rmse, "mae": cb_mae, "r2": cb_r2}
+            logger.info("CatBoost — RMSE: $%s | MAE: $%s | R²: %.3f", f"{cb_rmse:,.0f}", f"{cb_mae:,.0f}", cb_r2)
+        else:
+            cb_model = cb_pred = None
+            logger.info("CatBoost not installed — skipping")
 
         # Step 7: Select best model
         best_name = max(self.metrics, key=lambda k: self.metrics[k]["r2"])
