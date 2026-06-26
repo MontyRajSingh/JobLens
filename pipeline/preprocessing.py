@@ -154,7 +154,10 @@ class FeatureEngineer:
         # GROUP D3 — Target Encoding for Role
         role_means = df.groupby("role")["salary_usd_numeric"].mean().to_dict() if "role" in df.columns else {}
         self.role_target_map = role_means
-        features["role_target_encoded"] = df["role"].map(self.role_target_map).fillna(df["salary_usd_numeric"].mean())
+        if "role" in df.columns:
+            features["role_target_encoded"] = df["role"].map(self.role_target_map).fillna(df["salary_usd_numeric"].mean())
+        else:
+            features["role_target_encoded"] = df["salary_usd_numeric"].mean()
 
         # GROUP D4 — City one-hot (TOP 100 only)
         city_counts = df["city"].value_counts()

@@ -134,10 +134,10 @@ class GlassdoorScraper(BaseScraper):
                     )
                     salary = None
                     if salary_el:
-                        salary = extract_salary_from_text(salary_el[0].text, usd_rate)
-                    # Fallback: scan card text
+                        salary = extract_salary_from_text(salary_el[0].get_all_text() or salary_el[0].text, usd_rate)
+                    # Fallback: scan full card text
                     if not salary:
-                        salary = extract_salary_from_text(card_text, usd_rate)
+                        salary = extract_salary_from_text(card.get_all_text() or card_text, usd_rate)
 
                     # ── Description snippet
                     desc_el = card.css(

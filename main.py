@@ -147,30 +147,38 @@ def run_pipeline(
 
                     # --- Incremental Save ---
                     if jobs:
+                        # 1. Generate dedup keys
+                        import hashlib
+                        for job in jobs:
+                            if not job.get("dedup_key"):
+                                company = (job.get("company_name") or "").lower()
+                                title = (job.get("job_title") or "").lower()
+                                city = (job.get("city") or "").lower()
+                                job["dedup_key"] = hashlib.md5(
+                                    f"{company}{title}{city}".encode()
+                                ).hexdigest()[:12]
+
+                        # 2. Append to master CSV (independent of DB so the
+                        #    durable backup is always written; enforce fixed
+                        #    column order so appended batches stay aligned with
+                        #    the header — scrapers emit keys in different orders)
                         try:
-                            # 1. Generate dedup keys
-                            import hashlib
-                            for job in jobs:
-                                if not job.get("dedup_key"):
-                                    company = (job.get("company_name") or "").lower()
-                                    title = (job.get("job_title") or "").lower()
-                                    city = (job.get("city") or "").lower()
-                                    job["dedup_key"] = hashlib.md5(
-                                        f"{company}{title}{city}".encode()
-                                    ).hexdigest()[:12]
-                            
-                            # 2. Update Database
-                            from api.db.loader import save_jobs_to_db
-                            db_count = save_jobs_to_db(jobs)
-                            
-                            # 3. Append to master CSV
                             import pandas as pd
                             master_path = os.path.join(OUTPUT_DIR, "jobs_master.csv")
-                            pd.DataFrame(jobs).to_csv(master_path, mode='a', index=False, header=not os.path.exists(master_path))
-                            
-                            logger.info("✅ [%s] Saved %d jobs (DB + CSV)", src_name.upper(), len(jobs))
+                            batch_df = pd.DataFrame(jobs).reindex(columns=COLUMN_ORDER)
+                            batch_df.to_csv(master_path, mode='a', index=False, header=not os.path.exists(master_path))
+                            logger.info("✅ [%s] Appended %d jobs to CSV", src_name.upper(), len(jobs))
+                        except Exception as csv_err:
+                            logger.warning("⚠️  CSV append failed: %s", csv_err)
+
+                        # 3. Update database (independent; may be unavailable
+                        #    locally — failure must not block the CSV write)
+                        try:
+                            from api.db.loader import save_jobs_to_db
+                            db_count = save_jobs_to_db(jobs)
+                            logger.info("🗄️  [%s] Saved %d jobs to DB", src_name.upper(), db_count)
                         except Exception as save_err:
-                            logger.warning("⚠️  Incremental save failed: %s", save_err)
+                            logger.warning("⚠️  DB save failed: %s", save_err)
 
                     all_jobs.extend(jobs)
                     salary_hits = sum(1 for job in jobs if job.get("salary") or job.get("salary_usd_numeric"))

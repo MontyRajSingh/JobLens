@@ -102,13 +102,18 @@ def parse_salary_to_usd(raw: str, usd_rate: float = 1.0) -> Optional[str]:
     if period_match:
         period = period_match.group(1)
 
-    # Handle LPA / lakhs (Indian format)
-    lpa_match = re.search(r"([\d,.]+)\s*(?:[-–to]+\s*([\d,.]+)\s*)?(?:LPA|CTC|lakhs?|lacs?)", text, re.IGNORECASE)
+    # Handle LPA / lakhs / crores (Indian format), incl. L / Cr shorthand
+    lpa_match = re.search(
+        r"([\d,.]+)\s*(?:[-–to]+\s*([\d,.]+)\s*)?(LPA|CTC|lakhs?|lacs?|crores?|Cr|L)\b",
+        text, re.IGNORECASE,
+    )
     if lpa_match:
         low = _parse_number(lpa_match.group(1))
         high = _parse_number(lpa_match.group(2)) if lpa_match.group(2) else None
+        unit = lpa_match.group(3).lower()
+        multiplier = 10_000_000 if unit in ("cr", "crore", "crores") else 100_000
         if low is not None:
-            amount = ((low + high) / 2 if high else low) * 100_000
+            amount = ((low + high) / 2 if high else low) * multiplier
             return _format_usd(amount * usd_rate)
 
     # Handle "k" suffix
@@ -160,8 +165,8 @@ def extract_salary_from_text(text: str, usd_rate: float = 1.0) -> Optional[str]:
         r"\$\s*([\d,]+\.?\d*\s*[kK]?\s*(?:[-–to]+\s*\$?\s*[\d,]+\.?\d*\s*[kK]?)?(?:\s*(?:per|/)\s*(?:year|annum|month|hour|hr))?)",
         # Currency keyword (USD, CAD, AUD, SGD)
         r"(?:USD|CAD|AUD|SGD)\s*([\d,]+\.?\d*\s*[kK]?\s*(?:[-–to]+\s*[\d,]+\.?\d*\s*[kK]?)?)",
-        # Indian LPA/CTC
-        r"([\d,.]+\s*(?:[-–to]+\s*[\d,.]+\s*)?(?:LPA|CTC|lakhs?|lacs?))",
+        # Indian LPA/CTC/lakh/crore (incl. L / Cr shorthand)
+        r"([\d,.]+\s*(?:[-–to]+\s*[\d,.]+\s*)?(?:LPA|CTC|lakhs?|lacs?|crores?|Cr|L)\b)",
         # Per year / annum
         r"([\d,]+\.?\d*\s*[kK]?\s*(?:[-–to]+\s*[\d,]+\.?\d*\s*[kK]?)?\s*(?:per|/)\s*(?:year|annum))",
         # Per month

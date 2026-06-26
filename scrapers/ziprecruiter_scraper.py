@@ -66,7 +66,7 @@ class ZipRecruiterScraper(BaseScraper):
                     if card.css("h3"):
                         continue
 
-                    card_text = card.text or ""
+                    card_text = card.get_all_text() or card.text or ""
 
                     # ── Title — always in <h2>
                     h2 = card.css("h2")

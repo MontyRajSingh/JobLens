@@ -34,6 +34,7 @@ jobs:
           from pipeline.preprocessing import FeatureEngineer
           from pipeline.model import SalaryPredictor
           from pipeline.predict import predict_salary
+          from pipeline.data_quality import evaluate_training_readiness
           print('Pipeline OK')
           "
 

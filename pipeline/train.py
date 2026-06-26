@@ -2,7 +2,7 @@
 train.py — Training entry point for the JobLens salary prediction model.
 
 Orchestrates the full training pipeline:
-1. Load data from CSV, Kaggle dataset, or PostgreSQL database
+1. Load data from CSV or PostgreSQL database
 2. Check minimum salary rows
 3. FeatureEngineer().fit_transform() → feature matrix
 4. SalaryPredictor().train(X, y)
@@ -12,8 +12,6 @@ Orchestrates the full training pipeline:
 CLI:
     python -m pipeline.train
     python -m pipeline.train --data output/jobs_master.csv --min-rows 100
-    python -m pipeline.train --use-kaggle
-    python -m pipeline.train --use-kaggle --merge-scraped
     python -m pipeline.train --use-db
 """
 
@@ -42,9 +40,6 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_DATA = os.path.join(OUTPUT_DIR, "jobs_master.csv")
 DEFAULT_MODEL_DIR = os.path.join(os.path.dirname(__file__), "models")
-DEFAULT_KAGGLE_PATH = os.path.join(
-    os.path.dirname(__file__), "..", "data", "job_descriptions.csv"
-)
 
 
 def _load_existing_metadata(model_dir: str) -> dict:
@@ -85,12 +80,9 @@ def load_data(args) -> pd.DataFrame:
     Load data based on CLI flags.
 
     Priority:
-      1. --use-kaggle → load Kaggle via KaggleDatasetLoader
-      2. --merge-scraped → also load scraped CSV and concatenate
-      3. (default) → load scraped CSV from --data path
+      1. --use-db → load from PostgreSQL database
+      2. (default) → load scraped CSV from --data path
     """
-    frames = []
-
     if args.use_db:
         # Load from PostgreSQL database
         from dotenv import load_dotenv
@@ -107,54 +99,14 @@ def load_data(args) -> pd.DataFrame:
         print(f"   Database rows: {len(df):,}")
         return df
 
-    elif args.use_kaggle:
-        from pipeline.dataset_loader import KaggleDatasetLoader
-        kaggle_path = DEFAULT_KAGGLE_PATH
-        if not os.path.exists(kaggle_path):
-            print(f"\n❌ Kaggle dataset not found: {kaggle_path}")
-            sys.exit(1)
-
-        loader = KaggleDatasetLoader()
-        df_kaggle = loader.load(kaggle_path)
-        loader.validate(df_kaggle)
-        frames.append(df_kaggle)
-
-        # Also merge scraped data if requested
-        if args.merge_scraped:
-            scraped_path = args.data
-            if os.path.exists(scraped_path):
-                logger.info("Merging scraped data from %s", scraped_path)
-                df_scraped = pd.read_csv(scraped_path)
-                logger.info("Scraped data: %d rows", len(df_scraped))
-                print(f"   Scraped data:  {len(df_scraped):,} rows from {scraped_path}")
-                frames.append(df_scraped)
-            else:
-                logger.warning("Scraped data not found at %s — using Kaggle only", scraped_path)
-                print(f"   ⚠️  Scraped data not found: {scraped_path} — Kaggle only")
-
-        # Concatenate
-        df = pd.concat(frames, ignore_index=True)
-
-        # Deduplicate on dedup_key if present
-        if "dedup_key" in df.columns:
-            before = len(df)
-            df = df.drop_duplicates(subset=["dedup_key"], keep="first")
-            dropped = before - len(df)
-            if dropped > 0:
-                logger.info("Deduplication: removed %d duplicates → %d remaining", dropped, len(df))
-                print(f"   Dedup: removed {dropped:,} → {len(df):,} remaining")
-
-        print(f"   Total training rows: {len(df):,}\n")
-        return df
-
     else:
-        # Default: load scraped data
+        # Default: load scraped data from CSV
         data_path = args.data
         if not os.path.exists(data_path):
             logger.error("Data file not found: %s", data_path)
             print(f"\n❌ Data file not found: {data_path}")
             print("   Run the scraper first: python main.py --sources linkedin --max-jobs 30")
-            print("   Or use --use-kaggle to train on Kaggle dataset")
+            print("   Or use --use-db to train from the database.")
             sys.exit(1)
 
         df = pd.read_csv(data_path)
@@ -208,13 +160,11 @@ def train_pipeline(args) -> None:
     model_dir = args.model_dir
     min_rows = args.min_rows
 
-    source = "PostgreSQL database" if args.use_db else ("Kaggle dataset" if args.use_kaggle else args.data)
+    source = "PostgreSQL database" if args.use_db else args.data
     print(f"\n{'='*70}")
     print(f" JOBLENS TRAINING PIPELINE")
     print(f"{'='*70}")
     print(f" Source:    {source}")
-    if args.use_kaggle and args.merge_scraped:
-        print(f"           + scraped data from {args.data}")
     print(f" Model dir: {model_dir}")
     print(f" Min rows:  {min_rows}")
 
@@ -345,10 +295,8 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python -m pipeline.train --use-kaggle
   python -m pipeline.train --use-db
   python -m pipeline.train --data output/jobs_master.csv --min-rows 100
-  python -m pipeline.train --use-kaggle --merge-scraped
         """,
     )
     parser.add_argument(
@@ -356,16 +304,6 @@ Examples:
         type=str,
         default=DEFAULT_DATA,
         help=f"Path to scraped input CSV (default: {DEFAULT_DATA})",
-    )
-    parser.add_argument(
-        "--use-kaggle",
-        action="store_true",
-        help="Use Kaggle dataset from data/job_descriptions.csv",
-    )
-    parser.add_argument(
-        "--merge-scraped",
-        action="store_true",
-        help="Combine Kaggle + scraped data (requires --use-kaggle)",
     )
     parser.add_argument(
         "--use-db",
@@ -396,11 +334,6 @@ Examples:
         help="Save the new model even if it performs worse than the existing model",
     )
     args = parser.parse_args()
-
-    if args.merge_scraped and not args.use_kaggle:
-        parser.error("--merge-scraped requires --use-kaggle")
-    if args.use_db and args.use_kaggle:
-        parser.error("--use-db and --use-kaggle are mutually exclusive")
 
     train_pipeline(args)
 
