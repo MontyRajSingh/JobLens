@@ -24,6 +24,27 @@ logger = logging.getLogger(__name__)
 TABLE_COLUMNS = [c.name for c in jobs_table.columns if c.name not in ("id", "scraped_at")]
 
 
+def _to_number(v):
+    """Coerce mixed boolean/numeric/string values to float (or None)."""
+    if v is None:
+        return None
+    if isinstance(v, bool):
+        return 1.0 if v else 0.0
+    if isinstance(v, (int, float)):
+        return None if (isinstance(v, float) and pd.isna(v)) else float(v)
+    s = str(v).strip().lower()
+    if s in ("true", "yes", "y"):
+        return 1.0
+    if s in ("false", "no", "n"):
+        return 0.0
+    if s in ("", "nan", "none", "null"):
+        return None
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
 def save_jobs_to_db(jobs: list[dict]) -> int:
     """
     Insert a batch of scraped job dicts into the database.
@@ -97,6 +118,62 @@ def load_jobs_to_db(csv_path: str) -> int:
     # Convert to list of dicts for save_jobs_to_db
     jobs = df.to_dict(orient="records")
     return save_jobs_to_db(jobs)
+
+
+def reseed_jobs_from_csv(csv_path: str) -> int:
+    """
+    Replace the entire jobs table with cleaned data from a scraped CSV.
+
+    Used at API startup so the deployed app serves the committed scraped
+    dataset (jobs_master.csv) instead of any stale/seed data. The CSV is run
+    through DataCleaner so salary_usd_numeric is populated and rows are
+    deduplicated — Jobs filtering and Insights rely on the numeric salary.
+
+    Args:
+        csv_path: Path to the scraped jobs CSV.
+
+    Returns:
+        Number of rows loaded (0 if the CSV is missing/empty — table left intact).
+    """
+    if not os.path.exists(csv_path):
+        logger.warning("Reseed skipped: CSV not found at %s", csv_path)
+        return 0
+
+    init_db()
+    df = pd.read_csv(csv_path, low_memory=False)
+    if df.empty:
+        logger.warning("Reseed skipped: CSV is empty (%s)", csv_path)
+        return 0
+
+    # Clean: parse salary -> salary_usd_numeric, dedup, normalise
+    from pipeline.data_cleaner import DataCleaner
+    df = DataCleaner().clean(df)
+    if df.empty:
+        logger.warning("Reseed skipped: no rows after cleaning")
+        return 0
+
+    # Coerce Float columns (has_equity/has_bonus/is_faang/etc. arrive as
+    # strings like 'True'/'False'/'0') to real numbers so the API's bool()
+    # checks and salary filters work correctly.
+    from sqlalchemy import Float
+    float_cols = [c.name for c in jobs_table.columns if isinstance(c.type, Float)]
+    for col in float_cols:
+        if col in df.columns:
+            df[col] = df[col].map(_to_number)
+
+    # Build the output frame: explicit id (for GET /jobs/{id}), the known
+    # table columns, and a scraped_at timestamp (used for ordering).
+    keep = [c for c in TABLE_COLUMNS if c in df.columns]
+    df_out = df[keep].copy().reset_index(drop=True)
+    df_out.insert(0, "id", range(1, len(df_out) + 1))
+    df_out["scraped_at"] = datetime.utcnow()
+
+    # Replace the whole table — drops any stale/Kaggle data and rebuilds it
+    # from the scraped CSV. Idempotent across SQLite/Postgres.
+    df_out.to_sql("jobs", engine, if_exists="replace", index=False, chunksize=1000)
+
+    logger.info("Reseeded jobs table with %d rows from %s", len(df_out), csv_path)
+    return len(df_out)
 
 
 def load_training_data() -> pd.DataFrame:

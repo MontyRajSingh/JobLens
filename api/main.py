@@ -107,12 +107,26 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("⚠️  No model found at %s — prediction endpoint will return 503", model_path)
 
-    # Get ACTUAL count from DB (Skip heavy CSV loading on every startup)
+    # Reseed jobs from the committed scraped CSV so the app serves scraped
+    # data (not stale/seed data). The CSV is the single source of truth and
+    # the daily scraper keeps it updated.
     from api.db.database import SessionLocal, init_db, engine
     from sqlalchemy import text
-    
+
     logger.info("📡 API connecting to: %s", engine.url)
     init_db()
+
+    csv_path = os.path.join(DATA_DIR, "jobs_master.csv")
+    if not os.path.exists(csv_path):
+        csv_path = os.path.join(os.path.dirname(__file__), "..", "output", "jobs_master.csv")
+    try:
+        from api.db.loader import reseed_jobs_from_csv
+        loaded = reseed_jobs_from_csv(csv_path)
+        if loaded:
+            logger.info("🌱 Reseeded DB with %d scraped jobs from %s", loaded, csv_path)
+    except Exception as e:
+        logger.warning("⚠️  Job reseed failed (serving existing DB data): %s", e)
+
     with SessionLocal() as db:
         try:
             result = db.execute(text("SELECT COUNT(*) FROM jobs"))
