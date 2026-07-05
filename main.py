@@ -72,6 +72,8 @@ def run_pipeline(
     cities: Optional[List[tuple]] = None,
     keywords: Optional[List[str]] = None,
     max_jobs: int = MAX_JOBS_PER_SEARCH,
+    shard: Optional[int] = None,
+    total: int = 0,
 ) -> Tuple[List[dict], List[str]]:
     """
     Run the full scraping pipeline across sources × cities × keywords.
@@ -89,12 +91,28 @@ def run_pipeline(
         cities: List of (search_loc, linkedin_loc, currency, usd_rate) tuples.
         keywords: List of search keywords.
         max_jobs: Max jobs per search query.
+        shard: Optional 0-based shard index for city rotation. When set
+            together with `total`, only cities whose index i satisfies
+            i % total == shard are scraped. Used by the daily CI run to
+            spread the full city list across the days of a week.
+        total: Number of shards to split the city list into (use 0 to
+            disable sharding and scrape every city).
 
     Returns:
         Tuple of (all_jobs list, [csv_path, json_path]).
     """
     cities = cities or SCRAPE_CITIES
     keywords = keywords or KEYWORDS
+
+    # Optional city rotation: split the city list into `total` shards and
+    # keep only the `shard`-th one. CI passes --shard <day-of-week> --total 7
+    # so the whole city list is covered across a week.
+    if shard is not None and total and total > 0:
+        cities = [c for i, c in enumerate(cities) if i % total == shard]
+        logger.info(
+            "Sharding enabled: shard %d of %d → %d/%d cities",
+            shard, total, len(cities), len(SCRAPE_CITIES),
+        )
 
     # Ensure output directory exists
     os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -370,12 +388,16 @@ def main():
     parser = argparse.ArgumentParser(
         description="JobLens — Global Job Market Scraper",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
+    epilog="""
 Examples:
     python main.py --sources indeed levelsfyi payscale ziprecruiter
     python main.py --sources levelsfyi --max-jobs 20
     python main.py --sources indeed payscale --max-jobs 50
-        """,
+
+    # Rotate cities across a 7-day week (used by the daily CI run):
+    python main.py --sources indeed linkedin --shard 0 --total 7 --max-jobs 5
+    python main.py --sources indeed linkedin --shard 1 --total 7 --max-jobs 5
+    """,
     )
     parser.add_argument(
         "--sources",
@@ -390,7 +412,26 @@ Examples:
         default=MAX_JOBS_PER_SEARCH,
         help=f"Max jobs per search query (default: {MAX_JOBS_PER_SEARCH})",
     )
+    parser.add_argument(
+        "--shard",
+        type=int,
+        default=None,
+        help="0-based shard index for city rotation (use with --total). "
+             "CI passes the day-of-week so the full city list is covered "
+             "across a week. Omit to scrape every city.",
+    )
+    parser.add_argument(
+        "--total",
+        type=int,
+        default=0,
+        help="Number of shards to split the city list into (default: 0 = "
+             "no sharding). With --shard N, only cities at index i where "
+             "i %% total == N are scraped.",
+    )
     args = parser.parse_args()
+
+    if (args.shard is None) != (args.total in (None, 0)):
+        parser.error("--shard and --total must be supplied together")
 
     # Log configuration
     logger.info("=" * 60)
@@ -400,12 +441,16 @@ Examples:
     logger.info("Cities:    %d", len(SCRAPE_CITIES))
     logger.info("Keywords:  %s", KEYWORDS)
     logger.info("Max jobs:  %d per query", args.max_jobs)
+    if args.shard is not None:
+        logger.info("Shard:     %d of %d", args.shard, args.total)
     logger.info("Output:    %s", OUTPUT_DIR)
 
     # Run pipeline
     jobs, files = run_pipeline(
         sources=args.sources,
         max_jobs=args.max_jobs,
+        shard=args.shard,
+        total=args.total,
     )
 
     # Print report

@@ -23,14 +23,10 @@ ENABLED_SOURCES = ["indeed", "levelsfyi", "payscale", "ziprecruiter", "linkedin"
 # ──────────────────────────────────────────────
 SCRAPE_CITIES = [
     ("New York, NY, USA",       "New York City Metropolitan Area",    "USD", 1.00),
-    ("San Francisco, CA, USA",  "San Francisco Bay Area",             "USD", 1.00),
-    ("Seattle, WA, USA",        "Seattle, Washington, United States", "USD", 1.00),
     ("London, UK",              "London, England, United Kingdom",    "GBP", 1.27),
     ("Toronto, Canada",         "Toronto, Ontario, Canada",           "CAD", 0.74),
     ("Sydney, Australia",       "Sydney, New South Wales, Australia", "AUD", 0.65),
-    ("Berlin, Germany",         "Berlin, Germany",                    "EUR", 1.08),
     ("Singapore",               "Singapore",                          "SGD", 0.74),
-    ("Dubai, UAE",              "Dubai, United Arab Emirates",        "AED", 0.27),
     ("Bengaluru, India",        "Bengaluru, Karnataka",               "INR", 0.012),
     ("Gurugram, India",         "Gurugram, Haryana",                  "INR", 0.012),
     ("Hyderabad, India",        "Hyderabad, Telangana",               "INR", 0.012),
@@ -47,17 +43,11 @@ KEYWORDS = [
     "data analyst",
     "data engineer",
     "ui/ux designer",
-    "graphic designer",
     "full stack developer",
     "backend engineer",
     "frontend engineer",
     "devops engineer",
-    "cloud architect",
-    "product manager",
     "cyber security engineer",
-    "mobile app developer",
-    "qa engineer",
-    "system administrator",
     "ai research scientist"
 ]
 

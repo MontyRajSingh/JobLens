@@ -10,7 +10,12 @@ on:
 jobs:
   scrape-and-commit:
     runs-on: ubuntu-latest
-    
+
+    # Fail fast at 5h instead of grinding into GitHub's 6h default cap.
+    # The trimmed grid + city sharding should finish in ~3-4h; this is a
+    # safety net so a flaky day still gets partial data committed.
+    timeout-minutes: 300
+
     # Grant permission for the action to push changes back to the repo
     permissions:
       contents: write
@@ -39,10 +44,24 @@ jobs:
           # PostgreSQL connection for direct database inserts
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          # Adjust the max-jobs if you want it to scrape more or less per day
-          python main.py --max-jobs 30
-          
+          # Rotate cities across the days of the week so the full city
+          # list is covered over 7 days while keeping each run small
+          # enough to finish well within the timeout. Glassdoor is
+          # excluded here (needs login creds that aren't wired into CI);
+          # it still runs locally where credentials are available.
+          SHARD=$(( $(date +%u) - 1 ))   # Mon=0 .. Sun=6
+          echo "Running shard $SHARD of 7"
+          python main.py \
+            --sources indeed levelsfyi payscale ziprecruiter linkedin \
+            --shard "$SHARD" --total 7 \
+            --max-jobs 5
+
       - name: Commit and Push new data
+        # `always()` ensures partial data (appended incrementally to
+        # jobs_master.csv during the run) is committed even if the
+        # scrape step was cancelled or a source failed. The
+        # diff-index check below still prevents empty commits.
+        if: always()
         run: |
           # Configure git with a bot identity
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
