@@ -22,7 +22,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from config import SENIORITY_FROM_LINKEDIN
 from utils.text_utils import (
     clean_text, parse_linkedin_metadata, infer_seniority,
-    extract_experience, seniority_to_experience,
+    extract_experience, seniority_to_experience, extract_skills,
+    infer_skills_from_title,
 )
 from utils.salary_utils import parse_salary_numeric_usd, salary_text_to_number
 
@@ -52,15 +53,19 @@ class DataCleaner:
         df = df.copy()
 
         df = self._step1_drop_invalid(df)
+        df = self._step1b_drop_city_mismatch(df)
         df = self._step2_deduplicate(df)
         df = self._step3_clean_title(df)
         df = self._step4_clean_company(df)
         df = self._step5_extract_salary_numeric(df)
+        df = self._step5b_validate_salary_range(df)
         df = self._step6_fix_seniority(df)
+        df = self._step6b_backfill_skills(df)
         df = self._step7_fix_metadata(df)
         df = self._step8_fix_equity_bonus(df)
         df = self._step9_normalise_source(df)
         self._step10_quality_report(df)
+
 
         logger.info("DataCleaner: finished with %d rows", len(df))
         return df
@@ -76,6 +81,50 @@ class DataCleaner:
         df = df[df["job_title"].astype(str).str.len() >= 3]
         logger.info("Step 1 — Drop invalid: %d → %d rows", before, len(df))
         return df.reset_index(drop=True)
+
+    # ──────────────────────────────────────────────
+    # Step 1b: Drop city-location mismatches
+    # ──────────────────────────────────────────────
+
+    def _step1b_drop_city_mismatch(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Drop rows where job's actual location is in a different country than search city."""
+        before = len(df)
+
+        def get_country(loc_str: str) -> Optional[str]:
+            if not loc_str:
+                return None
+            loc_lower = str(loc_str).lower()
+            if "india" in loc_lower or any(city in loc_lower for city in ["bengaluru", "bangalore", "gurugram", "gurgaon", "hyderabad", "pune", "mumbai", "noida"]):
+                return "India"
+            if "united kingdom" in loc_lower or "england" in loc_lower or "london" in loc_lower or " uk" in loc_lower or loc_lower == "uk":
+                return "UK"
+            if "canada" in loc_lower or "toronto" in loc_lower or "ontario" in loc_lower or "vancouver" in loc_lower:
+                return "Canada"
+            if "australia" in loc_lower or "sydney" in loc_lower or "melbourne" in loc_lower or "nsw" in loc_lower:
+                return "Australia"
+            if "singapore" in loc_lower:
+                return "Singapore"
+            if "united states" in loc_lower or "usa" in loc_lower or "america" in loc_lower or any(state in loc_lower for state in [", ny", ", ca", ", wa", ", tx", ", il", "new york", "california", "washington", "texas", "illinois", "san francisco", "seattle", "austin", "chicago"]):
+                return "USA"
+            return None
+
+        def is_mismatch(row):
+            city = row.get("city")
+            location = row.get("location")
+            if not city or not location:
+                return False
+            city_country = get_country(city)
+            loc_country = get_country(location)
+            if city_country and loc_country and city_country != loc_country:
+                return True
+            return False
+
+        mismatched = df.apply(is_mismatch, axis=1)
+        df = df[~mismatched]
+        dropped = before - len(df)
+        logger.info("Step 1b — Drop city mismatch: dropped %d rows", dropped)
+        return df.reset_index(drop=True)
+
 
     # ──────────────────────────────────────────────
     # Step 2: Deduplicate
@@ -195,6 +244,47 @@ class DataCleaner:
         return df
 
     # ──────────────────────────────────────────────
+    # Step 5b: Validate salary range (ceilings)
+    # ──────────────────────────────────────────────
+
+    def _step5b_validate_salary_range(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Null out unreasonable salary values above per-city ceilings for non-FAANG companies."""
+        nulled = 0
+
+        def get_city_ceiling(city_str: str) -> float:
+            if not city_str:
+                return 500_000.0
+            city_lower = str(city_str).lower()
+            if any(c in city_lower for c in ["bengaluru", "gurugram", "hyderabad", "pune", "india"]):
+                return 100_000.0
+            if any(c in city_lower for c in ["london", "uk", "sydney", "australia", "singapore", "toronto", "canada"]):
+                return 400_000.0
+            return 500_000.0
+
+        for idx in df.index:
+            salary = df.at[idx, "salary_usd_numeric"]
+            if pd.isna(salary) or salary is None:
+                continue
+
+            # Exclude FAANG companies
+            is_faang_val = False
+            if "is_faang" in df.columns:
+                val = df.at[idx, "is_faang"]
+                is_faang_val = bool(val) and val not in (0, "0", "False", False)
+
+            if not is_faang_val:
+                city = df.at[idx, "city"]
+                ceiling = get_city_ceiling(city)
+                if salary > ceiling:
+                    df.at[idx, "salary_usd_numeric"] = np.nan
+                    df.at[idx, "salary"] = np.nan
+                    nulled += 1
+
+        logger.info("Step 5b — Salary ceiling validation: nulled %d suspect salaries", nulled)
+        return df
+
+
+    # ──────────────────────────────────────────────
     # Step 6: Fix seniority_level
     # ──────────────────────────────────────────────
 
@@ -231,14 +321,49 @@ class DataCleaner:
         return df
 
     # ──────────────────────────────────────────────
+    # Step 6b: Backfill skills_required
+    # ──────────────────────────────────────────────
+
+    def _step6b_backfill_skills(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Backfill missing skills_required from job description or title inference."""
+        filled = 0
+        for idx in df.index:
+            if pd.notna(df.at[idx, "skills_required"]) and df.at[idx, "skills_required"] and str(df.at[idx, "skills_required"]).strip():
+                continue
+
+            # Priority 1: Extract from description
+            desc = df.at[idx, "job_description"] if pd.notna(df.at[idx, "job_description"]) else ""
+            if desc:
+                skills = extract_skills(desc)
+                if skills:
+                    df.at[idx, "skills_required"] = skills
+                    filled += 1
+                    continue
+
+            # Priority 2: Infer from title
+            title = df.at[idx, "job_title"] if pd.notna(df.at[idx, "job_title"]) else ""
+            inferred = infer_skills_from_title(title)
+            if inferred:
+                df.at[idx, "skills_required"] = inferred
+                filled += 1
+
+        logger.info("Step 6b — Backfill skills: filled/inferred skills for %d rows", filled)
+        return df
+
+
+    # ──────────────────────────────────────────────
     # Step 7: Fix metadata fields
     # ──────────────────────────────────────────────
 
     def _step7_fix_metadata(self, df: pd.DataFrame) -> pd.DataFrame:
         """Fill missing employment_type, remote_type, industry, education_required."""
+        if "has_remote_benefits" in df.columns:
+            df["has_remote_benefits"] = df["has_remote_benefits"].astype(object)
+
         for idx in df.index:
             desc = df.at[idx, "job_description"] if pd.notna(df.at[idx, "job_description"]) else ""
             meta = parse_linkedin_metadata(desc) if desc else {}
+
 
             # Employment type
             if pd.isna(df.at[idx, "employment_type"]) or not df.at[idx, "employment_type"]:
@@ -247,6 +372,14 @@ class DataCleaner:
             # Remote type
             if pd.isna(df.at[idx, "remote_type"]) or not df.at[idx, "remote_type"]:
                 df.at[idx, "remote_type"] = meta.get("remote_type") or "On-site"
+
+            # Override remote_type if "remote" is in title
+            title = str(df.at[idx, "job_title"]) if pd.notna(df.at[idx, "job_title"]) else ""
+            if "remote" in title.lower() and df.at[idx, "remote_type"] == "On-site":
+                df.at[idx, "remote_type"] = "Remote"
+                if "has_remote_benefits" in df.columns:
+                    df.at[idx, "has_remote_benefits"] = True
+
 
             # Industry
             if pd.isna(df.at[idx, "industry"]) or not df.at[idx, "industry"]:

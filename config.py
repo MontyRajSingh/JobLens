@@ -16,7 +16,16 @@ load_dotenv()
 # ──────────────────────────────────────────────
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
 MAX_JOBS_PER_SEARCH = 5
-ENABLED_SOURCES = ["indeed", "levelsfyi", "payscale", "ziprecruiter", "linkedin", "glassdoor"]
+ENABLED_SOURCES = ["indeed", "levelsfyi", "payscale", "ziprecruiter", "linkedin", "wellfound", "instahyre", "naukri"]
+
+# ──────────────────────────────────────────────
+# Salary & Currency Conventions:
+# - `salary` field: formatted display string (e.g. "$X USD/yr", converted to USD)
+# - `salary_currency`: the original currency of the salary source
+# - `currency`: the local currency of the search city
+# - `salary_usd_numeric`: numeric USD value (float), set during cleaning
+# ──────────────────────────────────────────────
+
 
 # ──────────────────────────────────────────────
 # Cities to scrape: (search_location, linkedin_location, currency, usd_rate)
@@ -141,22 +150,4 @@ INDEED_DOMAINS = {
     "SGD": "https://sg.indeed.com",
 }
 
-# ──────────────────────────────────────────────
-# Glassdoor city IDs for location-based search
-# ──────────────────────────────────────────────
-GLASSDOOR_CITY_IDS = {
-    "New York City Metropolitan Area": "1132348",
-    "San Francisco Bay Area": "1147401",
-    "London, England, United Kingdom": "2671300",
-    "Toronto, Ontario, Canada": "2281069",
-    "Sydney, New South Wales, Australia": "2147714",
-    "Berlin, Germany": "1275612",
-    "Singapore": "2316524",
-    "Seattle, Washington, United States": "1150505",
-}
 
-# ──────────────────────────────────────────────
-# Glassdoor credentials (from .env)
-# ──────────────────────────────────────────────
-GLASSDOOR_EMAIL = os.getenv("GLASSDOOR_EMAIL", None)
-GLASSDOOR_PASSWORD = os.getenv("GLASSDOOR_PASSWORD", None)

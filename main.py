@@ -35,7 +35,9 @@ from scrapers.levelsfyi_scraper import LevelsFyiScraper
 from scrapers.payscale_scraper import PayScaleScraper
 from scrapers.ziprecruiter_scraper import ZipRecruiterScraper
 from scrapers.linkedin_scraper import LinkedInScraper
-from scrapers.glassdoor_scraper import GlassdoorScraper
+from scrapers.naukri_scraper import NaukriScraper
+from scrapers.instahyre_scraper import InstahyreScraper
+from scrapers.wellfound_scraper import WellfoundScraper
 from scrapers.base_scraper import BaseScraper
 from utils.validators import validate_dataframe
 
@@ -58,7 +60,9 @@ SCRAPER_MAP = {
     "payscale": PayScaleScraper,
     "ziprecruiter": ZipRecruiterScraper,
     "linkedin": LinkedInScraper,
-    "glassdoor": GlassdoorScraper,
+    "wellfound": WellfoundScraper,
+    "instahyre": InstahyreScraper,
+    "naukri": NaukriScraper,
 }
 
 # ──────────────────────────────────────────────
@@ -403,7 +407,7 @@ Examples:
         "--sources",
         nargs="+",
         default=ENABLED_SOURCES,
-        choices=["indeed", "levelsfyi", "payscale", "ziprecruiter", "linkedin", "glassdoor"],
+        choices=["indeed", "levelsfyi", "payscale", "ziprecruiter", "linkedin", "wellfound", "instahyre", "naukri"],
         help="Sources to scrape (default: all enabled)",
     )
     parser.add_argument(

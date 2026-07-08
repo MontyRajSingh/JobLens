@@ -394,3 +394,43 @@ def seniority_to_experience(seniority_label: str) -> Optional[str]:
         "Executive (10+ years)": "10+ years",
     }
     return mapping.get(seniority_label)
+
+
+# ──────────────────────────────────────────────
+# Title-based skills inference
+# ──────────────────────────────────────────────
+
+TITLE_SKILL_MAP = {
+    "data scientist": "Python, SQL, Machine Learning, Data Science",
+    "machine learning": "Python, Machine Learning, Deep Learning",
+    "data analyst": "SQL, Python, Excel, Data Analysis, Tableau",
+    "data engineer": "Python, SQL, Spark, Data Engineering, AWS",
+    "software engineer": "Python, Java, Git, REST, API",
+    "full stack": "JavaScript, React, Node.js, Python, SQL, Git",
+    "frontend": "JavaScript, React, TypeScript",
+    "backend": "Python, Java, SQL, REST, API, Docker",
+    "devops": "Docker, Kubernetes, AWS, CI/CD, Linux, Terraform",
+    "cyber security": "Cyber Security, Linux, Firewall, SIEM",
+    "ui/ux": "Figma, Adobe XD, Photoshop, Illustrator",
+    "ai research": "Python, Machine Learning, Deep Learning, PyTorch, NLP",
+}
+
+
+def infer_skills_from_title(title: str) -> Optional[str]:
+    """
+    Infer key skills from the job title based on known patterns.
+
+    Args:
+        title: Job title string.
+
+    Returns:
+        Comma-separated skills string or None.
+    """
+    if not title:
+        return None
+    title_lower = title.lower()
+    for keyword, skills in TITLE_SKILL_MAP.items():
+        if keyword in title_lower:
+            return skills
+    return None
+

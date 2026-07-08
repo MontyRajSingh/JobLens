@@ -46,13 +46,11 @@ jobs:
         run: |
           # Rotate cities across the days of the week so the full city
           # list is covered over 7 days while keeping each run small
-          # enough to finish well within the timeout. Glassdoor is
-          # excluded here (needs login creds that aren't wired into CI);
-          # it still runs locally where credentials are available.
+          # enough to finish well within the timeout.
           SHARD=$(( $(date +%u) - 1 ))   # Mon=0 .. Sun=6
           echo "Running shard $SHARD of 7"
           python main.py \
-            --sources indeed levelsfyi payscale ziprecruiter linkedin \
+            --sources indeed levelsfyi payscale ziprecruiter linkedin wellfound instahyre naukri \
             --shard "$SHARD" --total 7 \
             --max-jobs 5
 

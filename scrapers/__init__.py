@@ -17,7 +17,9 @@ from scrapers.levelsfyi_scraper import LevelsFyiScraper
 from scrapers.payscale_scraper import PayScaleScraper
 from scrapers.ziprecruiter_scraper import ZipRecruiterScraper
 from scrapers.linkedin_scraper import LinkedInScraper
-from scrapers.glassdoor_scraper import GlassdoorScraper
+from scrapers.naukri_scraper import NaukriScraper
+from scrapers.instahyre_scraper import InstahyreScraper
+from scrapers.wellfound_scraper import WellfoundScraper
 
 __all__ = [
     "BaseScraper",
@@ -26,5 +28,7 @@ __all__ = [
     "PayScaleScraper",
     "ZipRecruiterScraper",
     "LinkedInScraper",
-    "GlassdoorScraper",
+    "NaukriScraper",
+    "InstahyreScraper",
+    "WellfoundScraper",
 ]

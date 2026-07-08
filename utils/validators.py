@@ -44,7 +44,10 @@ def validate_job_record(job: Dict) -> Tuple[bool, List[str]]:
 
     # Source website
     source = job.get("source_website")
-    valid_sources = {"LinkedIn", "Indeed", "Glassdoor"}
+    valid_sources = {
+        "LinkedIn", "Indeed", "Levels.fyi", "PayScale", "ZipRecruiter",
+        "Wellfound", "Instahyre", "Naukri"
+    }
     if source not in valid_sources:
         issues.append(f"source_website '{source}' not in {valid_sources}")
 

@@ -19,7 +19,7 @@ from urllib.parse import quote_plus
 from scrapling.fetchers import Fetcher
 
 from scrapers.base_scraper import BaseScraper
-from utils.text_utils import infer_seniority, is_faang
+from utils.text_utils import infer_seniority, is_faang, infer_skills_from_title
 from config import MAX_JOBS_PER_SEARCH, COL_INDEX
 
 
@@ -36,6 +36,8 @@ class LevelsFyiScraper(BaseScraper):
 
     def __init__(self):
         super().__init__()
+        self._seen_job_ids = set()
+
 
     def scrape(
         self,
@@ -135,7 +137,14 @@ class LevelsFyiScraper(BaseScraper):
                     job_link = job_data.get("applicationUrl", "")
                     job_id = job_data.get("id", "")
 
-                    # Dedup
+                    # Dedup by job_id
+                    if job_id:
+                        if str(job_id) in self._seen_job_ids:
+                            self.logger.debug("Levels.fyi: skipping duplicate job_id=%s", job_id)
+                            continue
+                        self._seen_job_ids.add(str(job_id))
+
+                    # Dedup key
                     company_lower = company_name.lower().strip()
                     title_lower = job_title.lower().strip()
                     dedup_key = hashlib.md5(
@@ -160,7 +169,7 @@ class LevelsFyiScraper(BaseScraper):
                         "has_equity": True,  # Levels.fyi tracks total comp (includes equity)
                         "has_bonus": True,
                         "has_remote_benefits": remote_type in ("Remote", "Hybrid"),
-                        "skills_required": None,
+                        "skills_required": infer_skills_from_title(job_title),
                         "job_description": (
                             f"{company_name} ({company_type}, "
                             f"{employee_count or '?'} employees). "
