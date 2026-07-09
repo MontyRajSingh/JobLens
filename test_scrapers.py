@@ -12,12 +12,20 @@ from scrapers.indeed_scraper import IndeedScraper
 from scrapers.levelsfyi_scraper import LevelsFyiScraper
 from scrapers.payscale_scraper import PayScaleScraper
 from scrapers.ziprecruiter_scraper import ZipRecruiterScraper
+from scrapers.linkedin_scraper import LinkedInScraper
+from scrapers.wellfound_scraper import WellfoundScraper
+from scrapers.instahyre_scraper import InstahyreScraper
+from scrapers.naukri_scraper import NaukriScraper
 
 SCRAPERS = [
     ("Indeed",        IndeedScraper),
     ("Levels.fyi",    LevelsFyiScraper),
     ("PayScale",      PayScaleScraper),
     ("ZipRecruiter",  ZipRecruiterScraper),
+    ("LinkedIn",      LinkedInScraper),
+    ("Wellfound",     WellfoundScraper),
+    ("Instahyre",     InstahyreScraper),
+    ("Naukri",        NaukriScraper),
 ]
 
 KEYWORD  = "data scientist"
