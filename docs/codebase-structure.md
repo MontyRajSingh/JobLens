@@ -51,8 +51,8 @@ This replaces only `data/jobs.db`, runs the cleaner, and loads the current API s
 
 ### Deployment Module
 
-- Seam: `docker-compose.gcp.yml` plus `.env.gcp` on the GCP VM.
-- Interface: build/start with `docker compose --env-file .env.gcp -f docker-compose.gcp.yml up -d --build`.
+- Seam: `docker-compose.oci.yml` plus `.env.oci` on the OCI VM.
+- Interface: build/start with `docker compose --env-file .env.oci -f docker-compose.oci.yml up -d --build`.
 - Implementation: Postgres, FastAPI, frontend Nginx, health checks, seed/reseed behavior, and optional Supabase build args.
 - Locality rule: only the active deployment adapter should sit at the root. Retired provider configs belong in docs/history or git history, not beside the active adapter.
 

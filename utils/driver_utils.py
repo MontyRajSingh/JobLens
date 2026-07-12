@@ -2,7 +2,7 @@
 driver_utils.py — Selenium WebDriver factory.
 
 Configures a headless Chrome instance with anti-detection flags.
-Supports both local (ChromeDriverManager) and Docker/GCP (CHROME_BIN) setups.
+Supports both local (ChromeDriverManager) and Docker/Railway (CHROME_BIN) setups.
 """
 
 import os
@@ -40,7 +40,7 @@ def setup_driver() -> webdriver.Chrome:
 
     chrome_bin = os.getenv("CHROME_BIN")
     if chrome_bin:
-        # Docker / GCP: use the system-installed Chrome binary
+        # Docker / Railway: use the system-installed Chrome binary
         logger.info("Using CHROME_BIN: %s", chrome_bin)
         options.binary_location = chrome_bin
         options.add_argument("--no-sandbox")
