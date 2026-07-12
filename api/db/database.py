@@ -2,7 +2,7 @@
 database.py — SQLAlchemy engine and session management.
 
 Dev: SQLite at data/jobs.db (when no DATABASE_URL is set)
-Prod: DATABASE_URL env var (PostgreSQL on Railway / Docker).
+Prod: DATABASE_URL env var (PostgreSQL on Docker/GCP or another host).
 
 Provides get_db() dependency for FastAPI route injection
 and get_engine() for use by the scraper and training pipelines.
@@ -24,8 +24,8 @@ logger = logging.getLogger(__name__)
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 if DATABASE_URL:
-    # Production (PostgreSQL on Railway / Docker)
-    # Railway sometimes uses postgres:// which SQLAlchemy doesn't support
+    # Production (PostgreSQL on Docker/GCP or another host)
+    # Some providers use postgres://, which SQLAlchemy doesn't support.
     if DATABASE_URL.startswith("postgres://"):
         DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
     engine = create_engine(DATABASE_URL, echo=False, pool_pre_ping=True)
