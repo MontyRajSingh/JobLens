@@ -1,9 +1,8 @@
 import axios from 'axios';
 
-// API base URL. When unset (e.g. Vercel build without VITE_API_URL), fall back
-// to a relative path so requests hit the same origin and are proxied to the
-// backend by vercel.json (prod) and vite.config.js (dev) — avoiding CORS and
-// a hardcoded localhost that breaks the deployed site.
+// API base URL. When unset, fall back to a relative path so requests hit the
+// same origin and are proxied to the backend by nginx (prod) or Vite (dev).
+// This avoids CORS and a hardcoded localhost that breaks deployed sites.
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
 const client = axios.create({

@@ -23,7 +23,7 @@ jobs:
       - name: Check scrapers import cleanly
         run: |
           python -c "
-          from scrapers import LinkedInScraper, IndeedScraper, GlassdoorScraper
+          from scrapers import LinkedInScraper, IndeedScraper, LevelsFyiScraper, PayScaleScraper, ZipRecruiterScraper, WellfoundScraper, InstahyreScraper, NaukriScraper
           print('Scrapers OK')
           "
 
@@ -51,5 +51,4 @@ jobs:
           npm ci
           npm run build
         env:
-          VITE_API_URL: https://placeholder.railway.app
-
+          VITE_API_URL: ""

@@ -30,6 +30,36 @@ from utils.salary_utils import parse_salary_numeric_usd, salary_text_to_number
 logger = logging.getLogger(__name__)
 
 
+DEFAULT_JOB_COLUMNS = {
+    "job_title": None,
+    "company_name": None,
+    "city": None,
+    "location": None,
+    "salary": None,
+    "salary_currency": None,
+    "seniority_level": None,
+    "experience_required": None,
+    "employment_type": None,
+    "remote_type": None,
+    "industry": None,
+    "education_required": None,
+    "has_equity": 0,
+    "has_bonus": 0,
+    "has_remote_benefits": False,
+    "skills_required": None,
+    "job_description": "",
+    "job_link": None,
+    "job_id": None,
+    "source_website": None,
+    "dedup_key": None,
+    "is_faang": 0,
+    "cost_of_living_index": None,
+    "date_posted_raw": None,
+    "applicant_count": None,
+    "currency": None,
+}
+
+
 class DataCleaner:
     """
     Multi-step data cleaning pipeline for scraped job records.
@@ -51,6 +81,7 @@ class DataCleaner:
         """
         logger.info("DataCleaner: starting with %d rows", len(df))
         df = df.copy()
+        df = self._ensure_expected_columns(df)
 
         df = self._step1_drop_invalid(df)
         df = self._step1b_drop_city_mismatch(df)
@@ -68,6 +99,13 @@ class DataCleaner:
 
 
         logger.info("DataCleaner: finished with %d rows", len(df))
+        return df
+
+    def _ensure_expected_columns(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Add missing scraper-schema columns so cleaner steps can run on partial rows."""
+        for column, default in DEFAULT_JOB_COLUMNS.items():
+            if column not in df.columns:
+                df[column] = default
         return df
 
     # ──────────────────────────────────────────────
@@ -326,6 +364,22 @@ class DataCleaner:
 
     def _step6b_backfill_skills(self, df: pd.DataFrame) -> pd.DataFrame:
         """Backfill missing skills_required from job description or title inference."""
+        def merge_skills(*skill_strings):
+            merged = []
+            seen = set()
+            for skill_string in skill_strings:
+                if not skill_string:
+                    continue
+                for skill in str(skill_string).split(","):
+                    skill = skill.strip()
+                    if not skill:
+                        continue
+                    key = skill.lower()
+                    if key not in seen:
+                        seen.add(key)
+                        merged.append(skill)
+            return ", ".join(merged) if merged else None
+
         filled = 0
         for idx in df.index:
             if pd.notna(df.at[idx, "skills_required"]) and df.at[idx, "skills_required"] and str(df.at[idx, "skills_required"]).strip():
@@ -333,16 +387,17 @@ class DataCleaner:
 
             # Priority 1: Extract from description
             desc = df.at[idx, "job_description"] if pd.notna(df.at[idx, "job_description"]) else ""
+            title = df.at[idx, "job_title"] if pd.notna(df.at[idx, "job_title"]) else ""
+            inferred = infer_skills_from_title(title)
             if desc:
                 skills = extract_skills(desc)
-                if skills:
-                    df.at[idx, "skills_required"] = skills
+                combined = merge_skills(inferred, skills)
+                if combined:
+                    df.at[idx, "skills_required"] = combined
                     filled += 1
                     continue
 
             # Priority 2: Infer from title
-            title = df.at[idx, "job_title"] if pd.notna(df.at[idx, "job_title"]) else ""
-            inferred = infer_skills_from_title(title)
             if inferred:
                 df.at[idx, "skills_required"] = inferred
                 filled += 1
@@ -372,6 +427,8 @@ class DataCleaner:
             # Remote type
             if pd.isna(df.at[idx, "remote_type"]) or not df.at[idx, "remote_type"]:
                 df.at[idx, "remote_type"] = meta.get("remote_type") or "On-site"
+            if str(df.at[idx, "remote_type"]).lower() in {"remote", "hybrid"} and "has_remote_benefits" in df.columns:
+                df.at[idx, "has_remote_benefits"] = True
 
             # Override remote_type if "remote" is in title
             title = str(df.at[idx, "job_title"]) if pd.notna(df.at[idx, "job_title"]) else ""

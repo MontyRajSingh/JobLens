@@ -119,11 +119,24 @@ async def lifespan(app: FastAPI):
     csv_path = os.path.join(DATA_DIR, "jobs_master.csv")
     if not os.path.exists(csv_path):
         csv_path = os.path.join(os.path.dirname(__file__), "..", "output", "jobs_master.csv")
+    # Check if DB has any data first
+    db_is_empty = True
+    with SessionLocal() as db:
+        try:
+            result = db.execute(text("SELECT COUNT(*) FROM jobs"))
+            db_is_empty = (result.scalar() or 0) == 0
+        except Exception:
+            db_is_empty = True
+
     try:
-        from api.db.loader import reseed_jobs_from_csv
-        loaded = reseed_jobs_from_csv(csv_path)
-        if loaded:
-            logger.info("🌱 Reseeded DB with %d scraped jobs from %s", loaded, csv_path)
+        if os.getenv("SKIP_RESEED", "false").lower() == "true" and not db_is_empty:
+            logger.info("⏩ Skipping DB reseed (SKIP_RESEED=true and DB has data)")
+        else:
+            logger.info("🌱 Seeding DB from %s...", csv_path)
+            from api.db.loader import reseed_jobs_from_csv
+            loaded = reseed_jobs_from_csv(csv_path)
+            if loaded:
+                logger.info("🌱 Reseeded DB with %d scraped jobs from %s", loaded, csv_path)
     except Exception as e:
         logger.warning("⚠️  Job reseed failed (serving existing DB data): %s", e)
 

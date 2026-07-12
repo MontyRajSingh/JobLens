@@ -8,7 +8,7 @@ Exports all scraper classes for convenient importing:
 - PayScaleScraper: PayScale per-company salary scraper (StealthyFetcher)
 - ZipRecruiterScraper: ZipRecruiter job listing scraper (StealthyFetcher)
 - LinkedInScraper: LinkedIn public job search scraper (StealthyFetcher)
-- GlassdoorScraper: Glassdoor job + salary scraper (StealthyFetcher)
+- NaukriScraper, InstahyreScraper, WellfoundScraper: additional source adapters
 """
 
 from scrapers.base_scraper import BaseScraper

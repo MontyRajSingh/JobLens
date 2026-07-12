@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-# Install Chromium for headless scraping inside Docker/Railway
+# Install Chromium for headless scraping inside Docker/OCI
 RUN apt-get update && apt-get install -y \
     chromium \
     chromium-driver \

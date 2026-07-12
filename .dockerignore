@@ -1,0 +1,37 @@
+.git
+.github
+.docker
+
+# Local secrets and machine-specific config
+.env
+.env.*
+!.env.example
+!.env.oci.example
+
+# Python local state
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+
+# Frontend is built by frontend/Dockerfile, not the API image
+frontend/
+
+# Local/generated data. The OCI compose file mounts output/, data/, and models.
+data/
+output/
+
+# Scratch/debug output
+debug_dumps/
+scratch/
+graphify-out/
+.graphify_*
+run.log
+results.csv
+catboost_info/
+
+# OS/editor files
+.DS_Store
+.wdm/

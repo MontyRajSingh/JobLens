@@ -556,3 +556,9 @@ class FeatureEngineer:
 
         self._fitted = True
         logger.info("FeatureEngineer loaded from %s (%d features)", model_dir, len(self.feature_columns))
+
+
+class FeatureBuilder(FeatureEngineer):
+    """Backward-compatible name for older tests and scripts."""
+
+    pass

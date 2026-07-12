@@ -26,7 +26,7 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.ensemble import RandomForestRegressor
 import xgboost as xgb
 
-# LightGBM and CatBoost are training-only extras. Inference (e.g. on Render)
+# LightGBM and CatBoost are training-only extras. Container inference
 # only needs to load the saved best model via joblib, so keep these optional
 # to avoid hard import failures when the libraries aren't installed.
 try:

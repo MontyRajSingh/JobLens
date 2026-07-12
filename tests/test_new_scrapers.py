@@ -2,7 +2,7 @@ import unittest
 import pandas as pd
 import numpy as np
 import os, sys
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from scrapers.naukri_scraper import NaukriScraper
 from scrapers.instahyre_scraper import InstahyreScraper

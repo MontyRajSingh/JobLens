@@ -13,8 +13,9 @@ import Login from './pages/Login';
 import ParallaxStarsBackground from './components/ParallaxStarsBackground';
 
 function ProtectedRoute({ children }) {
-  const { user, loading } = useAuth();
+  const { configured, user, loading } = useAuth();
   if (loading) return <div className="min-h-screen bg-transparent flex items-center justify-center font-bold tracking-widest text-2xl uppercase text-brand-500">Loading...</div>;
+  if (!configured) return children;
   if (!user) return <Navigate to="/login" replace />;
   return children;
 }
