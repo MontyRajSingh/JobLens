@@ -15,7 +15,8 @@ All scraper subclasses must:
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, List
+from typing import Dict, List, Optional
+import os
 import logging
 
 
@@ -60,6 +61,49 @@ class BaseScraper(ABC):
         # Named logger per subclass so logs show e.g. "scrapers.linkedin_scraper"
         # instead of "scrapers.base_scraper" for every message
         self.logger = logging.getLogger(self.__class__.__module__ + "." + self.__class__.__name__)
+
+    def load_cookies(self, env_var: str, domain: str) -> Optional[List[Dict]]:
+        """
+        Read a browser cookie header string from an environment variable and
+        convert it to Playwright's cookie format for StealthyFetcher.
+
+        Accepts the raw request-header form you can copy from browser
+        devtools ("name1=value1; name2=value2"). Returns None when the
+        variable is unset/empty and logs a distinct COOKIE-MISSING warning
+        so login-walled sources fail loudly (but non-fatally) instead of
+        silently scraping nothing.
+
+        Args:
+            env_var: Name of the env var holding the cookie header string
+                     (e.g. "WELLFOUND_COOKIE").
+            domain:  Cookie domain to scope the cookies to (e.g.
+                     ".wellfound.com").
+
+        Returns:
+            A list of Playwright cookie dicts, or None if no cookie is set.
+        """
+        raw = (os.getenv(env_var) or "").strip()
+        if not raw:
+            self.logger.warning(
+                "%s: %s is not set — cannot authenticate; this source will "
+                "return no jobs. Add the secret to enable it.",
+                getattr(self, "SOURCE", env_var), env_var,
+            )
+            return None
+
+        cookies: List[Dict] = []
+        for pair in raw.split(";"):
+            pair = pair.strip()
+            if not pair or "=" not in pair:
+                continue
+            name, value = pair.split("=", 1)
+            cookies.append({
+                "name": name.strip(),
+                "value": value.strip(),
+                "domain": domain,
+                "path": "/",
+            })
+        return cookies or None
 
     @abstractmethod
     def scrape(

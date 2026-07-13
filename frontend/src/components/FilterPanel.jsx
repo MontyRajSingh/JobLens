@@ -1,13 +1,23 @@
 import { useState } from 'react';
 import { SlidersHorizontal, X } from 'lucide-react';
 
+// Kept in sync with SCRAPE_CITIES in config.py (search_location values)
 const CITIES = [
-  'New York, NY, USA', 'San Francisco, CA, USA', 'Seattle, WA, USA',
-  'Austin, TX, USA', 'Chicago, IL, USA', 'Boston, MA, USA',
-  'London, UK', 'Berlin, Germany', 'Toronto, Canada',
-  'Bangalore, India', 'Singapore', 'Sydney, Australia',
-  'Dublin, Ireland', 'Amsterdam, Netherlands', 'Dubai, UAE',
-  'Tokyo, Japan', 'Remote',
+  'New York, NY, USA', 'London, UK', 'Toronto, Canada',
+  'Sydney, Australia', 'Singapore', 'Bengaluru, India',
+  'Gurugram, India', 'Hyderabad, India', 'Pune, India',
+];
+
+// Kept in sync with ENABLED_SOURCES in config.py. `value` must equal the
+// stored source_website lowercased (the API filters on LOWER(source_website)),
+// e.g. "Levels.fyi" -> "levels.fyi".
+const SOURCES = [
+  { value: 'linkedin', label: 'LinkedIn' },
+  { value: 'levels.fyi', label: 'Levels.fyi' },
+  { value: 'payscale', label: 'PayScale' },
+  { value: 'wellfound', label: 'Wellfound' },
+  { value: 'instahyre', label: 'Instahyre' },
+  { value: 'naukri', label: 'Naukri' },
 ];
 
 const SENIORITY_LEVELS = [
@@ -130,18 +140,18 @@ export default function FilterPanel({ filters, onChange, onReset }) {
       {/* Source */}
       <div>
         <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Source</label>
-        <div className="flex gap-2">
-          {['LinkedIn', 'Indeed', 'Glassdoor'].map(source => (
+        <div className="grid grid-cols-2 gap-1.5">
+          {SOURCES.map(({ value, label }) => (
             <button
-              key={source}
-              onClick={() => updateFilter('source', filters.source === source ? undefined : source)}
-              className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                filters.source === source
+              key={value}
+              onClick={() => updateFilter('source', filters.source === value ? undefined : value)}
+              className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                filters.source === value
                   ? 'bg-brand-500/20 text-brand-300 border border-brand-500/30'
                   : 'bg-white/5 text-slate-400 border border-transparent hover:bg-white/10'
               }`}
             >
-              {source}
+              {label}
             </button>
           ))}
         </div>

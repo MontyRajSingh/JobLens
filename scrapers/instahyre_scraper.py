@@ -38,7 +38,12 @@ class InstahyreScraper(BaseScraper):
             url = f"https://www.instahyre.com/jobs/?search=true&keywords={quote_plus(keyword)}"
             self.logger.info("Instahyre: loading %s", url)
 
-            page = StealthyFetcher.fetch(url, headless=True, network_idle=True)
+            # Instahyre redirects anonymous searches to a login page — inject the
+            # session cookie from the INSTAHYRE_COOKIE secret. Missing cookie is
+            # warned by load_cookies(); empty results with a cookie present means
+            # it expired.
+            cookies = self.load_cookies("INSTAHYRE_COOKIE", ".instahyre.com")
+            page = StealthyFetcher.fetch(url, headless=True, network_idle=True, cookies=cookies)
 
             # Instahyre's job cards are company-card or job-card structures
             cards = page.css(
@@ -48,7 +53,11 @@ class InstahyreScraper(BaseScraper):
                 "div.employer-details"
             )
             if not cards:
-                self.logger.warning("Instahyre: no job cards found")
+                if cookies:
+                    self.logger.warning(
+                        "Instahyre: no job cards — INSTAHYRE_COOKIE may be expired "
+                        "(redirected to login) or selectors changed."
+                    )
                 return self.validate_batch(jobs)
 
             self.logger.info("Instahyre: found %d cards", len(cards))

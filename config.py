@@ -16,7 +16,16 @@ load_dotenv()
 # ──────────────────────────────────────────────
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
 MAX_JOBS_PER_SEARCH = 5
-ENABLED_SOURCES = ["indeed", "levelsfyi", "payscale", "ziprecruiter", "linkedin", "wellfound", "instahyre", "naukri"]
+# Indeed and ZipRecruiter were dropped: both hard-block GitHub's datacenter
+# IPs (HTTP 403) and can't be scraped from free CI without paid residential
+# proxies. See COOKIE_SOURCES for the login-walled boards we keep via cookies.
+ENABLED_SOURCES = ["levelsfyi", "payscale", "linkedin", "wellfound", "instahyre", "naukri"]
+
+# Login-walled sources that require an authenticated session cookie (supplied
+# via a GitHub secret named "<SOURCE>_COOKIE") to return any data. When the
+# cookie is missing/expired these scrapers return nothing and the run summary
+# flags them — they never crash the run.
+COOKIE_SOURCES = {"wellfound", "instahyre", "naukri"}
 
 # ──────────────────────────────────────────────
 # Salary & Currency Conventions:

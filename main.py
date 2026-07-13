@@ -2,9 +2,11 @@
 main.py — Pipeline orchestrator for JobLens scraping system.
 
 Provides run_pipeline() which loops city × keyword × source, deduplicates,
-and exports results to timestamped CSV/JSON files AND inserts them into
-the PostgreSQL database. Includes a CLI interface with --sources and
---max-jobs flags, plus a quality report summary.
+and exports results to timestamped CSV/JSON files plus an appended
+jobs_master.csv. The CSV is the single source of truth: the API reseeds
+its database from it on startup, so the scraper never writes to the DB
+directly. Includes a CLI interface with --sources and --max-jobs flags,
+plus a quality report and a per-source run summary.
 
 CLI usage:
     python main.py --sources linkedin
@@ -12,6 +14,7 @@ CLI usage:
 """
 
 import os
+import re
 import sys
 import json
 import hashlib
@@ -28,7 +31,7 @@ load_dotenv()
 
 from config import (
     OUTPUT_DIR, MAX_JOBS_PER_SEARCH, ENABLED_SOURCES,
-    SCRAPE_CITIES, KEYWORDS,
+    SCRAPE_CITIES, KEYWORDS, COOKIE_SOURCES,
 )
 from scrapers.indeed_scraper import IndeedScraper
 from scrapers.levelsfyi_scraper import LevelsFyiScraper
@@ -180,10 +183,11 @@ def run_pipeline(
                                     f"{company}{title}{city}".encode()
                                 ).hexdigest()[:12]
 
-                        # 2. Append to master CSV (independent of DB so the
-                        #    durable backup is always written; enforce fixed
-                        #    column order so appended batches stay aligned with
-                        #    the header — scrapers emit keys in different orders)
+                        # 2. Append to master CSV — the single source of truth.
+                        #    Enforce fixed column order so appended batches stay
+                        #    aligned with the header (scrapers emit keys in
+                        #    different orders). The API reseeds its DB from this
+                        #    file on startup, so no direct DB write is needed here.
                         try:
                             import pandas as pd
                             master_path = os.path.join(OUTPUT_DIR, "jobs_master.csv")
@@ -192,15 +196,6 @@ def run_pipeline(
                             logger.info("✅ [%s] Appended %d jobs to CSV", src_name.upper(), len(jobs))
                         except Exception as csv_err:
                             logger.warning("⚠️  CSV append failed: %s", csv_err)
-
-                        # 3. Update database (independent; may be unavailable
-                        #    locally — failure must not block the CSV write)
-                        try:
-                            from api.db.loader import save_jobs_to_db
-                            db_count = save_jobs_to_db(jobs)
-                            logger.info("🗄️  [%s] Saved %d jobs to DB", src_name.upper(), db_count)
-                        except Exception as save_err:
-                            logger.warning("⚠️  DB save failed: %s", save_err)
 
                     all_jobs.extend(jobs)
                     salary_hits = sum(1 for job in jobs if job.get("salary") or job.get("salary_usd_numeric"))
@@ -280,16 +275,8 @@ def run_pipeline(
         logger.info("📁 Saved %d jobs → %s", len(df), csv_path)
         logger.info("📁 Saved %d jobs → %s", len(df), json_path)
 
-        # Insert into database
-        try:
-            from dotenv import load_dotenv
-            load_dotenv()
-            from api.db.loader import save_jobs_to_db
-            db_count = save_jobs_to_db(all_jobs)
-            logger.info("🗄️  Inserted %d new jobs into database", db_count)
-        except Exception as e:
-            logger.warning("⚠️  Database insert failed (CSV backup available): %s", e)
-
+        # No direct DB write: the CSV is the source of truth and the API
+        # reseeds its database from it on startup.
         return all_jobs, [csv_path, json_path]
 
     logger.warning("No jobs collected!")
@@ -387,6 +374,66 @@ def print_quality_report(jobs: List[dict]) -> None:
     print("\n" + "=" * 70 + "\n")
 
 
+def _emit_run_summary(jobs: List[dict], requested_sources: List[str]) -> None:
+    """
+    Report per-source yield for this run and decide the run's exit status.
+
+    Fail-loud, non-fatal by design: any source that returned 0 jobs prints a
+    GitHub Actions ``::warning::`` annotation (cookie-based sources get a
+    cookie-specific hint) and is flagged in a ``$GITHUB_STEP_SUMMARY`` table,
+    but no single empty source fails the run. The ONLY hard-fail condition is
+    a total blackout — every source returning 0 — which exits non-zero so a
+    systemic breakage (bad deploy, network, all cookies dead) turns the run red.
+    """
+    def norm(s) -> str:
+        return re.sub(r"[^a-z0-9]", "", str(s or "").lower())
+
+    counts = {norm(s): 0 for s in requested_sources}
+    for job in jobs:
+        key = norm(job.get("source_website"))
+        if key in counts:
+            counts[key] += 1
+    total = sum(counts.values())
+
+    # Console summary
+    logger.info("=" * 60)
+    logger.info("Per-source yield this run:")
+    for src in requested_sources:
+        logger.info("  %-12s %d", src, counts.get(norm(src), 0))
+    logger.info("  %-12s %d", "TOTAL", total)
+    logger.info("=" * 60)
+
+    # GitHub Actions warning annotations for empty sources (non-fatal)
+    for src in requested_sources:
+        if counts.get(norm(src), 0) == 0:
+            if src.lower() in COOKIE_SOURCES:
+                print(
+                    f"::warning title=Empty source::{src} returned 0 jobs — its "
+                    f"login cookie ({src.upper()}_COOKIE) is likely missing or expired."
+                )
+            else:
+                print(f"::warning title=Empty source::{src} returned 0 jobs this run.")
+
+    # Step-summary table shown on the Actions run page (non-fatal)
+    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary_path:
+        try:
+            with open(summary_path, "a") as f:
+                f.write("### 🩺 JobLens scrape summary\n\n")
+                f.write("| Source | Jobs |\n| --- | ---: |\n")
+                for src in requested_sources:
+                    n = counts.get(norm(src), 0)
+                    f.write(f"| {src} | {n}{'' if n else ' ⚠️'} |\n")
+                f.write(f"| **Total** | **{total}** |\n")
+        except Exception as e:
+            logger.warning("Could not write step summary: %s", e)
+
+    # Sole hard-fail condition: total blackout.
+    if total == 0:
+        logger.error("❌ Total blackout — every source returned 0 jobs. Failing the run.")
+        sys.exit(1)
+
+
 def main():
     """CLI entry point for the scraping pipeline."""
     parser = argparse.ArgumentParser(
@@ -464,6 +511,10 @@ Examples:
         print("📁 Output files:")
         for f in files:
             print(f"    {f}")
+
+    # Per-source yield summary + fail-loud handling (annotations, step summary,
+    # and a non-zero exit only on a total blackout).
+    _emit_run_summary(jobs, args.sources)
 
 
 if __name__ == "__main__":

@@ -70,7 +70,11 @@ class WellfoundScraper(BaseScraper):
             url = f"https://wellfound.com/role/l/{kw_slug}/{loc_slug}"
             self.logger.info("Wellfound: loading %s", url)
 
-            page = StealthyFetcher.fetch(url, headless=True, network_idle=True)
+            # Wellfound gates listings behind login — inject the session cookie
+            # from the WELLFOUND_COOKIE secret. Missing cookie is warned by
+            # load_cookies(); empty results with a cookie present means it expired.
+            cookies = self.load_cookies("WELLFOUND_COOKIE", ".wellfound.com")
+            page = StealthyFetcher.fetch(url, headless=True, network_idle=True, cookies=cookies)
 
             # Wellfound listings reside in result cards
             cards = page.css(
@@ -79,7 +83,11 @@ class WellfoundScraper(BaseScraper):
                 "div.styles_result__"
             )
             if not cards:
-                self.logger.warning("Wellfound: no job cards found")
+                if cookies:
+                    self.logger.warning(
+                        "Wellfound: no job cards — WELLFOUND_COOKIE may be expired "
+                        "(hit the login wall) or selectors changed."
+                    )
                 return self.validate_batch(jobs)
 
             self.logger.info("Wellfound: found %d cards", len(cards))

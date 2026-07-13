@@ -56,13 +56,22 @@ class NaukriScraper(BaseScraper):
                 "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             }
 
+            # Naukri's search API requires an authenticated session — inject the
+            # cookie from the NAUKRI_COOKIE secret. Missing cookie is warned by
+            # load_cookies(); an empty body with a cookie present means it expired.
+            cookies = self.load_cookies("NAUKRI_COOKIE", ".naukri.com")
+
             # Use StealthyFetcher to perform the request
-            page = StealthyFetcher.fetch(api_url, headers=headers, headless=True, network_idle=True)
-            
+            page = StealthyFetcher.fetch(api_url, headers=headers, headless=True, network_idle=True, cookies=cookies)
+
             # Since the response is JSON, parse page text
             content_text = page.text
             if not content_text:
-                self.logger.warning("Naukri: empty response from API")
+                if cookies:
+                    self.logger.warning(
+                        "Naukri: empty response — NAUKRI_COOKIE may be expired "
+                        "or the API rejected the session."
+                    )
                 return self.validate_batch(jobs)
 
             try:
