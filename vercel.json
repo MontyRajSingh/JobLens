@@ -1,0 +1,15 @@
+{
+  "builds": [
+    {
+      "src": "frontend/package.json",
+      "use": "@vercel/static-build"
+    }
+  ],
+  "routes": [
+    { "src": "/api/(.*)", "dest": "https://joblens-api.onrender.com/api/$1" },
+    { "src": "^/([^/.]+\\.[^/]+)$", "dest": "/frontend/$1" },
+    { "src": "/assets/(.*)", "dest": "/frontend/assets/$1" },
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/frontend/index.html" }
+  ]
+}
