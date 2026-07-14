@@ -41,16 +41,6 @@ client.interceptors.response.use(
 export const predictSalary = (payload) =>
   client.post('/api/v1/predict', payload);
 
-export const predictFromResume = (file) => {
-  const formData = new FormData();
-  formData.append('file', file);
-  // Do not set Content-Type manually, let Axios set it with the boundary automatically
-  return client.post('/api/v1/predict/resume', formData, { timeout: 180000 });
-};
-
-export const analyzeOffer = (payload) =>
-  client.post('/api/v1/predict/offer', payload);
-
 // ── Jobs ──
 export const searchJobs = (params) =>
   client.get('/api/v1/jobs', { params });

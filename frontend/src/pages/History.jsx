@@ -4,14 +4,12 @@ import { Clock, Star } from 'lucide-react';
 import { useAuth } from '../auth/AuthProvider';
 import {
   listFavoriteJobs,
-  listSavedOffers,
   listSavedPredictions,
-  listSavedResumes,
 } from '../api/userData';
 
 export default function History() {
   const { configured, user, signInWithGoogle } = useAuth();
-  const [data, setData] = useState({ predictions: [], offers: [], resumes: [], favorites: [] });
+  const [data, setData] = useState({ predictions: [], favorites: [] });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -21,12 +19,10 @@ export default function History() {
     setError(null);
     Promise.all([
       listSavedPredictions(user.id),
-      listSavedOffers(user.id),
-      listSavedResumes(user.id),
       listFavoriteJobs(user.id),
     ])
-      .then(([predictions, offers, resumes, favorites]) => {
-        setData({ predictions, offers, resumes, favorites });
+      .then(([predictions, favorites]) => {
+        setData({ predictions, favorites });
       })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false));
@@ -56,7 +52,7 @@ export default function History() {
         <Clock className="text-brand-500" size={46} strokeWidth={3} /> SAVED HISTORY
       </h1>
       <p className="text-lg font-bold uppercase tracking-widest text-slate-400 mb-8 border-l-4 border-brand-500 pl-4">
-        Your saved predictions, resume analyses, offers, and favorite jobs.
+        Your saved predictions and favorite jobs.
       </p>
       {loading && <p className="text-slate-400 font-bold uppercase">Loading...</p>}
       {error && <p className="text-brand-accent font-bold uppercase">{error}</p>}
@@ -66,20 +62,6 @@ export default function History() {
           <>
             <p className="font-bold uppercase">{item.input?.job_title || 'Prediction'}</p>
             <p className="text-brand-500 font-bold">${item.result?.predicted_salary_usd?.toLocaleString?.() || 'N/A'}</p>
-          </>
-        )} />
-
-        <HistorySection title="Offers" items={data.offers} render={(item) => (
-          <>
-            <p className="font-bold uppercase">{item.input?.job_title || 'Offer'}</p>
-            <p className="text-brand-500 font-bold">{item.result?.verdict || 'N/A'} · ${item.result?.total_comp_usd?.toLocaleString?.() || 'N/A'}</p>
-          </>
-        )} />
-
-        <HistorySection title="Resumes" items={data.resumes} render={(item) => (
-          <>
-            <p className="font-bold uppercase">{item.extracted_data?.job_title || 'Resume analysis'}</p>
-            <p className="text-brand-500 font-bold">{item.extracted_data?.experience_years ?? 0} yrs · {item.gap_analysis?.missing_high_value_skills?.length || 0} gaps</p>
           </>
         )} />
 

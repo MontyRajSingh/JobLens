@@ -1,9 +1,9 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { DollarSign, TrendingUp, Award, ArrowRight, Loader2, UploadCloud } from 'lucide-react';
-import { predictSalary, predictFromResume } from '../api/client';
+import { DollarSign, TrendingUp, Award, ArrowRight, Loader2 } from 'lucide-react';
+import { predictSalary } from '../api/client';
 import { useAuth } from '../auth/AuthProvider';
-import { savePrediction, saveResume, uploadResumePdf } from '../api/userData';
+import { savePrediction } from '../api/userData';
 
 const CITIES = [
   'New York, NY, USA', 'San Francisco, CA, USA', 'Seattle, WA, USA',
@@ -45,13 +45,10 @@ export default function Predict() {
     has_bonus: false,
   });
   const [result, setResult] = useState(null);
-  const [resumeAnalysis, setResumeAnalysis] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState(null);
   const [error, setError] = useState(null);
-  const fileInputRef = useRef(null);
 
   const updateForm = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
 
@@ -108,7 +105,6 @@ export default function Predict() {
     setLoading(true);
     setError(null);
     setResult(null);
-    setResumeAnalysis(null);
 
     try {
       await runPrediction(form);
@@ -116,67 +112,6 @@ export default function Predict() {
       setError(e.message);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleFileUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.type !== 'application/pdf') {
-      setError('Please upload a PDF resume.');
-      return;
-    }
-
-    setUploading(true);
-    setLoading(true);
-    setError(null);
-    setResult(null);
-    setResumeAnalysis(null);
-    
-    try {
-      const { extracted_data, gap_analysis } = await predictFromResume(file);
-      setResumeAnalysis(gap_analysis || null);
-
-      const matchedSkills = Array.isArray(extracted_data.skills)
-        ? extracted_data.skills
-            .filter(s => SKILLS.some(preset => preset.toLowerCase() === String(s).toLowerCase()))
-            .map(s => SKILLS.find(preset => preset.toLowerCase() === String(s).toLowerCase()))
-        : [];
-
-      const nextForm = {
-        ...form,
-        ...extracted_data,
-        job_title: extracted_data.job_title || form.job_title || 'Software Engineer',
-        city: form.city,
-        company_name: extracted_data.company_name || form.company_name,
-        experience_years:
-          extracted_data.experience_years !== undefined && extracted_data.experience_years !== null
-            ? extracted_data.experience_years
-            : 0,
-        skills: matchedSkills,
-      };
-
-      setForm(nextForm);
-
-      const { data } = await runPrediction(nextForm);
-
-      if (configured && user) {
-        try {
-          const filePath = await uploadResumePdf(user.id, file);
-          await saveResume(user.id, filePath, extracted_data, gap_analysis || null, data);
-          setSaveMessage('Resume analysis saved.');
-        } catch (saveErr) {
-          setSaveMessage(`Resume parsed, but save failed: ${saveErr.message}`);
-        }
-      }
-      
-    } catch (err) {
-      setError(err.message || 'Failed to parse resume.');
-    } finally {
-      setUploading(false);
-      setLoading(false);
-      // Reset input so same file can be selected again
-      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -188,31 +123,6 @@ export default function Predict() {
       <p className="text-xl font-bold uppercase tracking-widest text-slate-400 mb-8 border-l-4 border-brand-500 pl-4">
         AI-powered salary prediction based on real market data.
       </p>
-
-      {/* Resume Upload CTA */}
-      <div className="mb-12 border-4 border-brand-500 bg-brand-500/10 p-6 flex flex-col md:flex-row items-center justify-between gap-6 shadow-brutal">
-        <div>
-          <h2 className="display-text text-3xl text-brand-500 mb-2">AUTO-FILL WITH RESUME</h2>
-          <p className="font-bold text-white uppercase tracking-wider text-sm">
-            Select company and city, then upload your PDF resume to extract role, skills, education, and experience before predicting.
-          </p>
-        </div>
-        <input 
-          type="file" 
-          accept="application/pdf" 
-          className="hidden" 
-          ref={fileInputRef} 
-          onChange={handleFileUpload}
-        />
-        <button 
-          onClick={() => fileInputRef.current?.click()}
-          disabled={uploading}
-          className="brutal-btn whitespace-nowrap disabled:opacity-50"
-        >
-          {uploading ? <Loader2 className="animate-spin" size={20} /> : <UploadCloud size={20} />} 
-          {uploading ? 'PARSING...' : 'UPLOAD RESUME (PDF)'}
-        </button>
-      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
         {/* Form */}
@@ -494,25 +404,6 @@ export default function Predict() {
                   <p className="text-[10px] text-slate-500 mt-4 uppercase font-bold tracking-tighter">
                     * CALCULATED BASED ON MARKET MEDIANS FOR THIS SENIORITY LEVEL
                   </p>
-                </div>
-              )}
-
-              {resumeAnalysis?.missing_high_value_skills?.length > 0 && (
-                <div className="brutal-card p-6 border-brand-500 bg-brand-500/5">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="display-text text-xl text-brand-500">RESUME GAP ANALYSIS</h3>
-                    <div className="bg-brand-500 text-black px-2 py-1 text-xs font-bold shadow-brutal-mini">
-                      TOP 3 LIFT: +${resumeAnalysis.estimated_top3_lift_usd?.toLocaleString()}
-                    </div>
-                  </div>
-                  <div className="space-y-3">
-                    {resumeAnalysis.missing_high_value_skills.slice(0, 5).map(item => (
-                      <div key={item.skill} className="flex justify-between border-b border-white/10 pb-2 last:border-0 font-bold uppercase text-sm">
-                        <span>{item.skill}</span>
-                        <span className="text-brand-500">+${item.estimated_lift_usd.toLocaleString()}</span>
-                      </div>
-                    ))}
-                  </div>
                 </div>
               )}
 

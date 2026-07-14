@@ -6,7 +6,7 @@
 │                                                                              │
 │  React + Vite app on Vercel                                                  │
 │                                                                              │
-│  Pages: Home · Jobs · Job Detail · Predict · Offer Analyzer · Insights       │
+│  Pages: Home · Jobs · Job Detail · Predict · Insights                        │
 │         Company Profile · History · Login                                    │
 │                                                                              │
 │  Components: Navbar · JobCard · FilterPanel · Charts · Visual backgrounds    │
@@ -27,8 +27,8 @@
 │                                                                             │
 │  ┌────────────────────┐ ┌────────────────────┐ ┌─────────────────────────┐  │
 │  │ Jobs Router        │ │ Predict Router     │ │ Insights Router         │  │
-│  │ search · detail ·  │ │ salary · resume ·  │ │ market summaries ·      │  │
-│  │ company profiles   │ │ offer analysis     │ │ salary/city · skills    │  │
+│  │ search · detail ·  │ │ salary prediction  │ │ market summaries ·      │  │
+│  │ company profiles   │ │                    │ │ salary/city · skills    │  │
 │  └──────────┬─────────┘ └──────────┬─────────┘ └───────────┬─────────────┘  │
 └─────────────┼──────────────────────┼───────────────────────┼────────────────┘
               │ SQLAlchemy           │ model call             │ aggregate SQL
@@ -55,8 +55,8 @@
 │  Raw scrape → normalized dicts → output/jobs_master.csv (committed, seed)   │
 └──────────────────────────────────────────────────────────────────────────────┘
 
-Separate user path: React → Supabase (auth, saved predictions/offers/resumes,
-favorite_jobs, resume-pdfs bucket). Schema in supabase/user_history.sql.
+Separate user path: React → Supabase (auth, saved predictions,
+favorite_jobs). Schema in supabase/user_history.sql.
 ```
 
 Frontend never talks to the market-data DB directly — it calls the backend via
@@ -127,8 +127,6 @@ Job search      Jobs.jsx → searchJobs → GET /jobs → jobs table → JobCard
 Job detail      JobDetail.jsx → getJob → GET /jobs/{id} → JobRecord
 Company profile CompanyProfile.jsx → GET /jobs/company/{name} → aggregate SQL
 Salary predict  Predict.jsx → POST /predict → pipeline.predict → models/*
-Resume predict  Predict.jsx → POST /predict/resume → PDF text → infer → predict
-Offer analysis  OfferAnalyzer.jsx → POST /predict/offer → verdict
 Market insights Insights.jsx → GET /insights/* → aggregate SQL → Charts.jsx
 Saved history   Login → Supabase Auth → userData.js → Supabase → History.jsx
 ```
