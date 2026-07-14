@@ -47,6 +47,8 @@ python3 scripts/rebuild_local_db.py
 
 This replaces only `data/jobs.db`, runs the cleaner, and loads the current API schema.
 
+`data/jobs.db` is git-ignored and must stay untracked — it is a derived local artifact, never a data source of record.
+
 ### Frontend Module
 
 - Seam: `frontend/src/api/client.js` and the React routes in `App.jsx`.
