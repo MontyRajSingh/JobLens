@@ -6,14 +6,9 @@ POST /api/v1/predict
   Calls predict_salary() from pipeline/predict.py.
 """
 
-import os
-import json
 import logging
-import requests
 import re
-from io import BytesIO
-import PyPDF2
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException
 from sqlalchemy import text as sql_text
 
 from api.db.database import SessionLocal
@@ -170,31 +165,6 @@ def _market_reference_salary(job_title: str, city: str, seniority: str | None = 
     return int(salaries[len(salaries) // 2]), len(salaries)
 
 
-def _resume_gap_analysis(extracted_data: dict) -> dict:
-    """Suggest missing high-value skills from saved premium data."""
-    model_dir = os.getenv("MODEL_DIR", os.path.join(os.path.dirname(__file__), "..", "..", "pipeline", "models"))
-    premium_path = os.path.join(model_dir, "skill_premiums.json")
-    try:
-        with open(premium_path, "r") as f:
-            premiums = json.load(f)
-    except Exception:
-        premiums = {}
-
-    detected = {str(skill).lower() for skill in extracted_data.get("skills", []) if skill}
-    missing = []
-    for skill, premium in sorted(premiums.items(), key=lambda item: item[1], reverse=True):
-        if str(skill).lower() not in detected:
-            missing.append({"skill": skill, "estimated_lift_usd": int(premium)})
-        if len(missing) == 5:
-            break
-
-    return {
-        "detected_skills": extracted_data.get("skills", []),
-        "missing_high_value_skills": missing,
-        "estimated_top3_lift_usd": sum(item["estimated_lift_usd"] for item in missing[:3]),
-    }
-
-
 @router.post(
     "",
     response_model=PredictResponse,
@@ -328,91 +298,3 @@ async def analyze_offer(request: OfferAnalyzeRequest):
     except Exception as e:
         logger.exception("Offer analysis error")
         raise HTTPException(status_code=500, detail=f"Offer analysis failed: {str(e)}")
-
-@router.post(
-    "/resume",
-    summary="Predict salary from Resume",
-    description="Upload a resume PDF to extract fields via OpenRouter (Nemotron) and run prediction.",
-)
-async def predict_from_resume(file: UploadFile = File(...)):
-    if not file.filename.endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are supported")
-    
-    # Extract text from PDF
-    try:
-        content = await file.read()
-        pdf_reader = PyPDF2.PdfReader(BytesIO(content))
-        text = ""
-        for page in pdf_reader.pages:
-            text += page.extract_text() + "\n"
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to read PDF: {str(e)}")
-
-    # Call OpenRouter API
-    api_key = os.getenv("OPENROUTER_API_KEY")
-    if not api_key:
-        logger.error("OPENROUTER_API_KEY not set")
-        raise HTTPException(status_code=500, detail="Resume parsing service misconfigured")
-    url = "https://openrouter.ai/api/v1/chat/completions"
-    
-    prompt = f"""
-    You are an AI resume parser. Extract the following details from the resume text provided below.
-    If total years of experience is explicitly mentioned, return it as a number.
-    If total years of experience is not mentioned, return 0.
-    Return ONLY a valid JSON object (no markdown formatting, no commentary) with the following schema:
-    {{
-        "job_title": "Current or target job title (string)",
-        "experience_years": "Total years of experience (number)",
-        "skills": ["List of top technical skills", ...],
-        "education_required": "Highest education degree (e.g. Bachelor's, Master's, PhD, or empty string)",
-        "company_name": "Current or most recent company name (string)"
-    }}
-    
-    Resume Text:
-    {text}
-    """
-    
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "model": "nvidia/nemotron-3-super-120b-a12b:free",
-        "messages": [{"role": "user", "content": prompt}],
-    }
-    
-    try:
-        response = requests.post(url, headers=headers, json=payload, timeout=120)
-        response.raise_for_status()
-        result_text = response.json()["choices"][0]["message"]["content"].strip()
-        
-        # Clean up markdown code blocks if any
-        if result_text.startswith("```json"):
-            result_text = result_text[7:-3].strip()
-        elif result_text.startswith("```"):
-            result_text = result_text[3:-3].strip()
-            
-        extracted_data = json.loads(result_text)
-    except Exception as e:
-        logger.exception("Failed to parse resume with OpenRouter")
-        raise HTTPException(status_code=500, detail=f"Failed to process resume: {str(e)}")
-        
-    # Normalize defaults for prediction. City is intentionally left to the
-    # frontend so the user-selected city is preserved.
-    experience_years = _coerce_experience_years(extracted_data.get("experience_years"))
-    extracted_data["experience_years"] = experience_years
-    extracted_data["seniority_level"] = _seniority_from_experience(experience_years)
-    if not str(extracted_data.get("job_title") or "").strip():
-        extracted_data["job_title"] = _infer_job_title_from_resume(
-            text,
-            extracted_data.get("skills") if isinstance(extracted_data.get("skills"), list) else [],
-        )
-    extracted_data["employment_type"] = "Full-time"
-    extracted_data["remote_type"] = "On-site"
-    extracted_data["has_equity"] = False
-    extracted_data["has_bonus"] = False
-
-    return {
-        "extracted_data": extracted_data,
-        "gap_analysis": _resume_gap_analysis(extracted_data),
-    }
