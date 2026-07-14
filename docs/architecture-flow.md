@@ -19,9 +19,10 @@
 │                              BACKEND API LAYER                              │
 │                                                                             │
 │  FastAPI on Render (api/main.py)                                            │
-│    • Loads env + ML model artifacts                                         │
-│    • Initializes DB schema                                                  │
-│    • Reseeds jobs from output/jobs_master.csv on startup                    │
+│    • Opens the port immediately; startup work runs in a background thread   │
+│    • Loads env + ML model artifacts                                          │
+│    • Initializes DB schema                                                   │
+│    • Reseeds jobs from output/jobs_master.csv (skipped if CSV unchanged)    │
 │    • Mounts /api/v1 routers · Exposes /health                              │
 │                                                                             │
 │  ┌────────────────────┐ ┌────────────────────┐ ┌─────────────────────────┐  │
@@ -84,13 +85,21 @@ GitHub scheduler (daily)
   → append to output/jobs_master.csv   ← single source of truth
   → per-source summary + ::warning:: annotations + step-summary table
   → git commit, then rebase-and-retry push (can't drop a night's data)
-  → Render redeploys → FastAPI startup reseeds jobs table from the CSV
+  → Render redeploys → FastAPI reseeds the jobs table from the CSV in a
+    background thread (new CSV → new fingerprint → full reseed)
 ```
 
 Key properties:
 
 - **CSV is the source of truth.** The scraper does **not** write to the DB; the
   API reseeds from `jobs_master.csv` on boot (`reseed_jobs_from_csv`).
+- **Fast boot.** The API opens its port immediately and runs model loading +
+  seeding in a background thread. The reseed stores an MD5 fingerprint of the
+  seeded CSV in the `app_meta` table and is skipped entirely when the DB
+  already holds that exact CSV — so restarts without a new scrape serve
+  existing data instantly. When a reseed does run, it loads into a
+  `jobs_staging` table and swaps it in atomically, so concurrent requests
+  never see an empty jobs table.
 - **Fail-loud, non-fatal.** One dead scraper never crashes the run. Empty
   sources raise a GitHub warning annotation and a step-summary flag; only a
   **total blackout** (every source returns 0) fails the run.

@@ -11,7 +11,7 @@ This document records the intended module shape for JobLens. The goal is to keep
 - Implementation: site-specific adapters in `scrapers/` and shared browser/text/salary helpers in `utils/`.
 - Active sources (`config.ENABLED_SOURCES`): `levelsfyi`, `payscale`, `linkedin` (open) and `wellfound`, `instahyre`, `naukri` (cookie-authenticated, listed in `config.COOKIE_SOURCES`). Indeed and ZipRecruiter were dropped — both hard-block CI datacenter IPs (403) and would need paid residential proxies.
 - Cookie auth: login-walled sources read a browser `Cookie:` header string from a `<SOURCE>_COOKIE` env var (GitHub secret) via `BaseScraper.load_cookies(env_var, domain)`, injected into the Scrapling fetch. A missing/expired cookie makes that source return nothing — it never crashes the run.
-- Output: the pipeline writes only `output/jobs_master.csv` (the source of truth); it does **not** write to the database. The API reseeds the DB from the CSV on startup.
+- Output: the pipeline writes only `output/jobs_master.csv` (the source of truth); it does **not** write to the database. The API reseeds the DB from the CSV in a background thread on startup, skipping the reseed when the DB already holds that exact CSV.
 - Fail-loud, non-fatal: each source is isolated. `main._emit_run_summary` prints a per-source yield table, raises a `::warning::` annotation and step-summary flag for empty sources, and exits non-zero only on a total blackout (every source returns 0).
 - Locality rule: selectors, text extraction quirks, rate-limit handling, and source-specific parsing stay inside the source adapter.
 
@@ -34,6 +34,7 @@ This document records the intended module shape for JobLens. The goal is to keep
 - Seam: `/api/v1/*` route contracts and `/health`.
 - Interface: Pydantic request/response schemas in `api/schemas/`.
 - Implementation: DB startup, reseeding, rate limiting, CORS, and route-specific query logic.
+- Fast boot: the lifespan hook opens the port immediately and runs model loading + DB seeding in a background thread. Reseeding fingerprints the CSV (MD5, stored in the `app_meta` table) and is skipped when the DB was already seeded from a byte-identical CSV; when it does run, it builds a `jobs_staging` table and swaps it in atomically so live requests never see an empty table.
 - Locality rule: deployment-specific boot flags belong in environment variables, not route handlers.
 
 ### Local Database Rebuild

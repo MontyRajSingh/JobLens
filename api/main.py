@@ -70,46 +70,37 @@ _app_state = {
     "model_loaded": False,
     "jobs_count": 0,
     "model_metadata": {},
+    "startup_complete": False,
 }
 
-# ──────────────────────────────────────────────
-# Rate Limiter
-# ──────────────────────────────────────────────
-limiter = Limiter(key_func=get_remote_address)
 
-
-# ──────────────────────────────────────────────
-# Lifespan
-# ──────────────────────────────────────────────
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Startup: load ML model + seed database."""
-    logger.info("=" * 60)
-    logger.info("JobLens API — Starting up (%s)", ENVIRONMENT)
-    logger.info("=" * 60)
-
-    # Load ML model
+def _load_model():
+    """Load the ML model artifacts (runs in the startup background thread)."""
     model_path = os.path.join(MODEL_DIR, "model.pkl")
-    if os.path.exists(model_path):
-        try:
-            from pipeline.predict import _ensure_loaded
-            _ensure_loaded(MODEL_DIR)
-            _app_state["model_loaded"] = True
-
-            metadata_path = os.path.join(MODEL_DIR, "metadata.json")
-            if os.path.exists(metadata_path):
-                with open(metadata_path, "r") as f:
-                    _app_state["model_metadata"] = json.load(f)
-
-            logger.info("✅ ML model loaded from %s", MODEL_DIR)
-        except Exception as e:
-            logger.warning("⚠️  ML model not loaded: %s", e)
-    else:
+    if not os.path.exists(model_path):
         logger.warning("⚠️  No model found at %s — prediction endpoint will return 503", model_path)
+        return
+    try:
+        from pipeline.predict import _ensure_loaded
+        _ensure_loaded(MODEL_DIR)
+        _app_state["model_loaded"] = True
 
-    # Reseed jobs from the committed scraped CSV so the app serves scraped
-    # data (not stale/seed data). The CSV is the single source of truth and
-    # the daily scraper keeps it updated.
+        metadata_path = os.path.join(MODEL_DIR, "metadata.json")
+        if os.path.exists(metadata_path):
+            with open(metadata_path, "r") as f:
+                _app_state["model_metadata"] = json.load(f)
+
+        logger.info("✅ ML model loaded from %s", MODEL_DIR)
+    except Exception as e:
+        logger.warning("⚠️  ML model not loaded: %s", e)
+
+
+def _seed_database():
+    """Reseed jobs from the committed CSV (runs in the startup background thread).
+
+    The CSV is the single source of truth; reseed_jobs_from_csv skips the
+    expensive clean-and-replace when the DB already holds this exact CSV.
+    """
     from api.db.database import SessionLocal, init_db, engine
     from sqlalchemy import text
 
@@ -119,7 +110,7 @@ async def lifespan(app: FastAPI):
     csv_path = os.path.join(DATA_DIR, "jobs_master.csv")
     if not os.path.exists(csv_path):
         csv_path = os.path.join(os.path.dirname(__file__), "..", "output", "jobs_master.csv")
-    # Check if DB has any data first
+
     db_is_empty = True
     with SessionLocal() as db:
         try:
@@ -143,12 +134,48 @@ async def lifespan(app: FastAPI):
     with SessionLocal() as db:
         try:
             result = db.execute(text("SELECT COUNT(*) FROM jobs"))
-            actual_count = result.scalar() or 0
-            _app_state["jobs_count"] = actual_count
-            logger.info("📊 Total jobs available in DB: %d", actual_count)
+            _app_state["jobs_count"] = result.scalar() or 0
+            logger.info("📊 Total jobs available in DB: %d", _app_state["jobs_count"])
         except Exception as e:
             logger.warning("⚠️  Could not count jobs: %s", e)
             _app_state["jobs_count"] = 0
+
+
+def _startup_work():
+    """Everything that used to block startup, now off the request path."""
+    try:
+        _seed_database()
+        _load_model()
+    finally:
+        _app_state["startup_complete"] = True
+        logger.info("✅ Background startup complete")
+
+
+# ──────────────────────────────────────────────
+# Rate Limiter
+# ──────────────────────────────────────────────
+limiter = Limiter(key_func=get_remote_address)
+
+
+# ──────────────────────────────────────────────
+# Lifespan
+# ──────────────────────────────────────────────
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup: bind immediately, then load model + seed DB in the background.
+
+    The seed/model work used to run inline here, which held the port closed
+    for the whole cold start (CSV read + clean + table rebuild + model
+    unpickle). Running it in a thread lets /health and the data routes
+    respond right away; routes serve whatever the DB already holds until the
+    background reseed swaps in fresh data.
+    """
+    logger.info("=" * 60)
+    logger.info("JobLens API — Starting up (%s)", ENVIRONMENT)
+    logger.info("=" * 60)
+
+    import threading
+    threading.Thread(target=_startup_work, name="startup-seed", daemon=True).start()
 
     logger.info("JobLens API ready at http://localhost:8000")
     logger.info("📖 Docs: http://localhost:8000/docs")

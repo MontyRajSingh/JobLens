@@ -91,6 +91,16 @@ jobs_table = Table(
 )
 
 
+# Small key-value table for app bookkeeping (e.g. the fingerprint of the
+# last-seeded jobs_master.csv, so unchanged restarts can skip the reseed).
+app_meta_table = Table(
+    "app_meta",
+    metadata,
+    Column("meta_key", Text, primary_key=True),
+    Column("meta_value", Text),
+)
+
+
 def get_db():
     """FastAPI dependency: yield a database session, auto-close on exit."""
     db = SessionLocal()

@@ -8,6 +8,7 @@ Provides two entry points:
 """
 
 import os
+import hashlib
 import logging
 from datetime import datetime
 
@@ -16,7 +17,7 @@ from sqlalchemy import text, inspect
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
-from api.db.database import engine, metadata, jobs_table, init_db
+from api.db.database import engine, metadata, jobs_table, app_meta_table, init_db
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +121,33 @@ def load_jobs_to_db(csv_path: str) -> int:
     return save_jobs_to_db(jobs)
 
 
+SEED_FINGERPRINT_KEY = "jobs_master_csv_fingerprint"
+
+
+def _csv_fingerprint(csv_path: str) -> str:
+    """MD5 of the CSV contents — identifies exactly what was last seeded."""
+    h = hashlib.md5()
+    with open(csv_path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _get_meta(conn, key: str):
+    row = conn.execute(
+        text("SELECT meta_value FROM app_meta WHERE meta_key = :k"), {"k": key}
+    ).fetchone()
+    return row[0] if row else None
+
+
+def _set_meta(conn, key: str, value: str):
+    conn.execute(text("DELETE FROM app_meta WHERE meta_key = :k"), {"k": key})
+    conn.execute(
+        text("INSERT INTO app_meta (meta_key, meta_value) VALUES (:k, :v)"),
+        {"k": key, "v": value},
+    )
+
+
 def reseed_jobs_from_csv(csv_path: str) -> int:
     """
     Replace the entire jobs table with cleaned data from a scraped CSV.
@@ -129,17 +157,37 @@ def reseed_jobs_from_csv(csv_path: str) -> int:
     through DataCleaner so salary_usd_numeric is populated and rows are
     deduplicated — Jobs filtering and Insights rely on the numeric salary.
 
+    Skips the expensive clean-and-replace when the DB already holds data
+    seeded from a byte-identical CSV (fingerprint stored in app_meta), so
+    restarts without a new scrape boot fast.
+
     Args:
         csv_path: Path to the scraped jobs CSV.
 
     Returns:
-        Number of rows loaded (0 if the CSV is missing/empty — table left intact).
+        Number of rows loaded (0 if the CSV is missing/empty or already
+        seeded — table left intact).
     """
     if not os.path.exists(csv_path):
         logger.warning("Reseed skipped: CSV not found at %s", csv_path)
         return 0
 
     init_db()
+
+    fingerprint = _csv_fingerprint(csv_path)
+    with engine.connect() as conn:
+        try:
+            seeded = _get_meta(conn, SEED_FINGERPRINT_KEY)
+            jobs_count = conn.execute(text("SELECT COUNT(*) FROM jobs")).scalar() or 0
+        except Exception:
+            seeded, jobs_count = None, 0
+    if seeded == fingerprint and jobs_count > 0:
+        logger.info(
+            "Reseed skipped: DB already holds %d rows from this CSV (fingerprint %s)",
+            jobs_count, fingerprint[:12],
+        )
+        return 0
+
     df = pd.read_csv(csv_path, low_memory=False)
     if df.empty:
         logger.warning("Reseed skipped: CSV is empty (%s)", csv_path)
@@ -168,9 +216,15 @@ def reseed_jobs_from_csv(csv_path: str) -> int:
     df_out.insert(0, "id", range(1, len(df_out) + 1))
     df_out["scraped_at"] = datetime.utcnow()
 
-    # Replace the whole table — drops any stale/Kaggle data and rebuilds it
-    # from the scraped CSV. Idempotent across SQLite/Postgres.
-    df_out.to_sql("jobs", engine, if_exists="replace", index=False, chunksize=1000)
+    # Build the staging table then swap it in atomically, so requests being
+    # served while a background reseed runs never see a dropped/empty jobs
+    # table. Works on both SQLite and Postgres (transactional DDL).
+    df_out.to_sql("jobs_staging", engine, if_exists="replace", index=False, chunksize=1000)
+
+    with engine.begin() as conn:
+        conn.execute(text("DROP TABLE IF EXISTS jobs"))
+        conn.execute(text("ALTER TABLE jobs_staging RENAME TO jobs"))
+        _set_meta(conn, SEED_FINGERPRINT_KEY, fingerprint)
 
     logger.info("Reseeded jobs table with %d rows from %s", len(df_out), csv_path)
     return len(df_out)
