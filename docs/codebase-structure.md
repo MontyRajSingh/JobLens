@@ -9,7 +9,11 @@ This document records the intended module shape for JobLens. The goal is to keep
 - Seam: `main.py` / `run_pipeline(...)` for orchestration, `BaseScraper.scrape(...)` for individual source adapters.
 - Interface: source name, keyword, location, currency, USD rate, and max jobs in; normalized job dictionaries out.
 - Implementation: site-specific adapters in `scrapers/` and shared browser/text/salary helpers in `utils/`.
-- Locality rule: selectors, rate-limit handling, and source-specific parsing stay inside the source adapter.
+- Active sources (`config.ENABLED_SOURCES`): `levelsfyi`, `payscale`, `linkedin` (open) and `wellfound`, `instahyre`, `naukri` (cookie-authenticated, listed in `config.COOKIE_SOURCES`). Indeed and ZipRecruiter were dropped — both hard-block CI datacenter IPs (403) and would need paid residential proxies.
+- Cookie auth: login-walled sources read a browser `Cookie:` header string from a `<SOURCE>_COOKIE` env var (GitHub secret) via `BaseScraper.load_cookies(env_var, domain)`, injected into the Scrapling fetch. A missing/expired cookie makes that source return nothing — it never crashes the run.
+- Output: the pipeline writes only `output/jobs_master.csv` (the source of truth); it does **not** write to the database. The API reseeds the DB from the CSV on startup.
+- Fail-loud, non-fatal: each source is isolated. `main._emit_run_summary` prints a per-source yield table, raises a `::warning::` annotation and step-summary flag for empty sources, and exits non-zero only on a total blackout (every source returns 0).
+- Locality rule: selectors, text extraction quirks, rate-limit handling, and source-specific parsing stay inside the source adapter.
 
 ### Cleaning And Feature Module
 
